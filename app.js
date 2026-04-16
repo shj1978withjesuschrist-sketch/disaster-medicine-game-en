@@ -955,6 +955,10 @@ function renderIntro() {
       <div class="admin-link-wrap">
         <button class="admin-link-btn" id="admin-link-btn">🔐 Admin</button>
       </div>
+      <div class="game-footer-credit">
+        <p>© 2026 Shin's Disaster Medicine Academy LLC. All rights reserved.</p>
+        <p>Education Operations: Soonchunhyang University Disaster Medicine Center</p>
+      </div>
     </div>`;
 
   // QR code
