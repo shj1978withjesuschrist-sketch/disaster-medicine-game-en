@@ -1,0 +1,1582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Disaster Medicine Survival — Admin Dashboard</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0e1118;--surface:#1a1d27;--surface2:#252836;--border:#2e3142;--text:#eef0f6;--text2:#8b8fa3;--accent:#448aff;--red:#ff3b5c;--green:#00e676;--yellow:#ffca28;--purple:#b388ff;--orange:#ff9100;--cyan:#00e5ff}
+body{font-family:'Inter','Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+
+/* Login */
+.login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+.login-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:40px;max-width:400px;width:100%;text-align:center}
+.login-box h1{font-size:1.5rem;margin-bottom:8px}
+.login-box p{color:var(--text2);font-size:0.9rem;margin-bottom:24px}
+.login-box input{width:100%;padding:12px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:1rem;margin-bottom:16px;outline:none}
+.login-box input:focus{border-color:var(--accent)}
+.login-box button{width:100%;padding:12px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-size:1rem;font-weight:600;cursor:pointer}
+.login-box button:hover{opacity:0.9}
+.login-error{color:var(--red);font-size:0.85rem;margin-top:8px}
+
+/* Dashboard */
+.dashboard{display:none;padding:20px;max-width:1400px;margin:0 auto}
+.dash-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+.dash-header h1{font-size:1.4rem;display:flex;align-items:center;gap:8px}
+.dash-header h1 span{font-size:0.75rem;background:var(--accent);padding:2px 8px;border-radius:4px;vertical-align:middle}
+.header-actions{display:flex;gap:8px}
+.header-actions button{padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);cursor:pointer;font-size:0.85rem}
+.header-actions button:hover{border-color:var(--accent)}
+.header-actions button.danger{border-color:var(--red);color:var(--red)}
+.header-actions button.danger:hover{background:var(--red);color:#fff}
+
+/* Stats Grid */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px}
+.stat-card .label{font-size:0.8rem;color:var(--text2);margin-bottom:4px}
+.stat-card .value{font-size:2rem;font-weight:700;line-height:1.2}
+.stat-card .sub{font-size:0.75rem;color:var(--text2);margin-top:4px}
+.stat-card.accent .value{color:var(--accent)}
+.stat-card.green .value{color:var(--green)}
+.stat-card.yellow .value{color:var(--yellow)}
+.stat-card.red .value{color:var(--red)}
+.stat-card.purple .value{color:var(--purple)}
+
+/* Sections */
+.section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px}
+.section h2{font-size:1.1rem;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.section h2 .icon{font-size:1.2rem}
+
+/* Tables */
+table{width:100%;border-collapse:collapse;font-size:0.85rem}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)}
+th{color:var(--text2);font-weight:500;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.5px}
+td{color:var(--text)}
+tr:hover td{background:rgba(68,138,255,0.05)}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:600}
+.badge-red{background:rgba(255,59,92,0.15);color:var(--red)}
+.badge-green{background:rgba(0,230,118,0.15);color:var(--green)}
+.badge-yellow{background:rgba(255,202,40,0.15);color:var(--yellow)}
+.badge-blue{background:rgba(68,138,255,0.15);color:var(--accent)}
+.badge-purple{background:rgba(179,136,255,0.15);color:var(--purple)}
+
+/* Progress bar */
+.progress{height:6px;background:var(--bg);border-radius:3px;overflow:hidden;margin-top:4px}
+.progress-bar{height:100%;border-radius:3px;transition:width 0.5s ease}
+
+/* Mode stats */
+.mode-stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.mode-stat-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px}
+.mode-stat-card h3{font-size:0.95rem;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.mode-stat-card .stats-row{display:flex;justify-content:space-between;margin-top:8px;font-size:0.8rem;color:var(--text2)}
+.mode-stat-card .stats-row span:last-child{color:var(--text);font-weight:600}
+
+/* Charts placeholder */
+.chart-area{height:200px;background:var(--bg);border-radius:8px;display:flex;align-items:flex-end;padding:20px;gap:4px}
+.chart-bar{background:var(--accent);border-radius:3px 3px 0 0;min-width:8px;flex:1;transition:height 0.3s ease;position:relative}
+.chart-bar:hover{opacity:0.8}
+.chart-bar .tooltip{display:none;position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:var(--surface2);padding:4px 8px;border-radius:4px;font-size:0.7rem;white-space:nowrap;color:var(--text)}
+.chart-bar:hover .tooltip{display:block}
+
+/* Search */
+.search-bar{display:flex;gap:8px;margin-bottom:16px}
+.search-bar input{flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:0.9rem;outline:none}
+.search-bar input:focus{border-color:var(--accent)}
+.search-bar button{padding:10px 20px;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-size:0.9rem}
+
+/* Pagination */
+.pagination{display:flex;justify-content:center;gap:8px;margin-top:16px}
+.pagination button{padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);cursor:pointer;font-size:0.8rem}
+.pagination button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.pagination button:hover{border-color:var(--accent)}
+
+/* Tabs */
+.tabs{display:flex;gap:4px;margin-bottom:16px;overflow-x:auto}
+.tab{padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text2);cursor:pointer;font-size:0.85rem;white-space:nowrap}
+.tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.tab:hover{border-color:var(--accent)}
+
+/* Session detail modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.show{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;max-width:800px;width:100%;max-height:80vh;overflow-y:auto;padding:24px}
+.modal h2{margin-bottom:16px}
+.modal-close{float:right;background:none;border:none;color:var(--text2);font-size:1.5rem;cursor:pointer}
+.modal-close:hover{color:var(--text)}
+
+/* Responsive */
+@media(max-width:768px){
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+  .mode-stat-grid{grid-template-columns:1fr}
+  table{font-size:0.75rem}
+  th,td{padding:6px 8px}
+  .dash-header{flex-direction:column;align-items:flex-start}
+}
+@media(max-width:480px){
+  .stat-grid{grid-template-columns:1fr}
+  .tabs{flex-wrap:wrap}
+}
+.research-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.research-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.research-card h3 { font-size: 1rem; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.stat-table { width: 100%; font-size: 0.8rem; }
+.stat-table th { text-align: left; color: var(--text2); padding: 6px 8px; font-size: 0.7rem; text-transform: uppercase; }
+.stat-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.stat-table td.num { text-align: right; font-family: 'JetBrains Mono', monospace; }
+.alpha-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+.alpha-good { background: rgba(0,230,118,0.15); color: var(--green); }
+.alpha-acceptable { background: rgba(255,202,40,0.15); color: var(--yellow); }
+.alpha-poor { background: rgba(255,59,92,0.15); color: var(--red); }
+.chart-container { position: relative; height: 280px; margin: 12px 0; }
+.export-btn-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+.export-btn { padding: 8px 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: 0.85rem; display: flex; align-items: center; gap: 6px; }
+.export-btn:hover { border-color: var(--accent); background: rgba(68,138,255,0.1); }
+.correlation-matrix { overflow-x: auto; }
+.corr-cell { text-align: center; min-width: 60px; }
+.item-good { color: var(--green); }
+.item-revise { color: var(--yellow); }
+.item-poor { color: var(--red); }
+.significance { font-size: 0.7rem; vertical-align: super; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-wrap" id="login-section">
+  <div class="login-box">
+    <h1>🏥 Admin Dashboard</h1>
+    <p>Disaster Medicine Survival — Education Management System</p>
+    <input type="password" id="admin-pw" placeholder="Enter admin password" autocomplete="off">
+    <button onclick="doLogin()">Login</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div class="dashboard" id="dashboard">
+  <div class="dash-header">
+    <h1>🏥 Disaster Medicine Survival <span>Admin</span></h1>
+    <div class="header-actions">
+      <button onclick="refreshDashboard()">🔄 Refresh</button>
+      <button onclick="exportCSV()">📊 Export CSV</button>
+      <button class="danger" onclick="clearData()">🗑️ Clear Data</button>
+      <button onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <!-- Overview Stats -->
+  <div class="stat-grid" id="stat-grid"></div>
+
+  <!-- Tabs -->
+  <div class="tabs" id="main-tabs">
+    <div class="tab active" data-tab="overview" onclick="switchTab('overview')">📊 Overview</div>
+    <div class="tab" data-tab="sessions" onclick="switchTab('sessions')">👥 Sessions</div>
+    <div class="tab" data-tab="questions" onclick="switchTab('questions')">❓ Question Analysis</div>
+    <div class="tab" data-tab="modes" onclick="switchTab('modes')">🎮 Mode Analysis</div>
+    <div class="tab" data-tab="research" onclick="switchTab('research')">📊 Research Analysis</div>
+  </div>
+
+  <!-- Tab Content -->
+  <div id="tab-overview" class="tab-content">
+    <div class="section">
+      <h2><span class="icon">📈</span> Daily Participation Trend (Last 30 Days)</h2>
+      <div class="chart-area" id="daily-chart"></div>
+    </div>
+    <div class="section">
+      <h2><span class="icon">🎮</span> Performance by Mode</h2>
+      <div class="mode-stat-grid" id="mode-stats"></div>
+    </div>
+    <div class="section">
+      <h2><span class="icon">⚠️</span> Hardest Questions (by error rate)</h2>
+      <table id="hard-questions-table">
+        <thead><tr><th>Question ID</th><th>Mode</th><th>Attempts</th><th>Correct Rate</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tab-sessions" class="tab-content" style="display:none">
+    <div class="section">
+      <h2><span class="icon">👥</span> Trainee Session List</h2>
+      <div class="search-bar">
+        <input type="text" id="search-nickname" placeholder="Search nickname...">
+        <button onclick="searchSessions()">Search</button>
+      </div>
+      <table id="sessions-table">
+        <thead><tr><th>Nickname</th><th>Start Time</th><th>Total Score</th><th>Level</th><th>Max Streak</th><th>Modes Completed</th><th>Details</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="pagination" id="sessions-pagination"></div>
+    </div>
+  </div>
+
+  <div id="tab-questions" class="tab-content" style="display:none">
+    <div class="section">
+      <h2><span class="icon">❓</span> Question Accuracy Analysis</h2>
+      <div class="tabs" id="mode-filter-tabs">
+        <div class="tab active" onclick="filterQuestions('')">All</div>
+        <div class="tab" onclick="filterQuestions('triage')">Triage</div>
+        <div class="tab" onclick="filterQuestions('quiz')">Quiz</div>
+        <div class="tab" onclick="filterQuestions('cbrne')">CBRNE</div>
+        <div class="tab" onclick="filterQuestions('mci')">MCI</div>
+        <div class="tab" onclick="filterQuestions('ethics')">Ethics</div>
+        <div class="tab" onclick="filterQuestions('leadership')">Leadership</div>
+        <div class="tab" onclick="filterQuestions('teamwork')">Teamwork</div>
+        <div class="tab" onclick="filterQuestions('cbrneAdv')">☣️ Adv. CBRNE</div>
+        <div class="tab" onclick="filterQuestions('tactical')">🎯 Tactical Med</div>
+        <div class="tab" onclick="filterQuestions('ctm')">🛡️ CTM</div>
+        <div class="tab" onclick="filterQuestions('campaign')">⚔️ Campaign</div>
+      </div>
+      <table id="question-analytics-table">
+        <thead><tr><th>Question ID</th><th>Mode</th><th>Attempts</th><th>Correct</th><th>Correct Rate</th><th>Avg. Time</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tab-modes" class="tab-content" style="display:none">
+    <div class="section">
+      <h2><span class="icon">🎮</span> Detailed Mode Analysis</h2>
+      <div class="mode-stat-grid" id="mode-detail-stats"></div>
+    </div>
+  </div>
+
+  <div id="tab-research" class="tab-content" style="display:none">
+    <!-- Loading indicator -->
+    <div id="research-loading" style="text-align:center;padding:40px;color:var(--text2)">
+      <div style="font-size:2rem;margin-bottom:12px">⏳</div>
+      <p>Running statistical analysis...</p>
+    </div>
+    
+    <div id="research-content" style="display:none">
+      <!-- Export buttons -->
+      <div class="section">
+        <h2><span class="icon">📥</span> Data Export</h2>
+        <div class="export-btn-group">
+          <button class="export-btn" onclick="exportResearchJSON()">📋 Full Analysis Results (JSON)</button>
+          <button class="export-btn" onclick="exportRawData()">🗃️ Raw Data (for SPSS/R)</button>
+          <button class="export-btn" onclick="exportPaperTables()">📝 Paper-Ready Tables (HTML)</button>
+        </div>
+      </div>
+
+      <!-- Section 1: Descriptive Statistics -->
+      <div class="section">
+        <h2><span class="icon">📐</span> Descriptive Statistics</h2>
+        <div style="overflow-x:auto" id="descriptive-table-container"></div>
+      </div>
+
+      <!-- Section 2: Score Distribution Charts -->
+      <div class="section">
+        <h2><span class="icon">📊</span> Score Distribution</h2>
+        <div class="research-grid">
+          <div class="research-card">
+            <h3>📈 Overall Score Distribution</h3>
+            <div class="chart-container"><canvas id="score-dist-chart"></canvas></div>
+          </div>
+          <div class="research-card">
+            <h3>🎯 Mode Average Comparison</h3>
+            <div class="chart-container"><canvas id="mode-comparison-chart"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Reliability -->
+      <div class="section">
+        <h2><span class="icon">🔬</span> Reliability Analysis</h2>
+        <div id="reliability-container"></div>
+      </div>
+
+      <!-- Section 4: Item Analysis -->
+      <div class="section">
+        <h2><span class="icon">🔎</span> Item Analysis</h2>
+        <p style="color:var(--text2);font-size:0.85rem;margin-bottom:12px">Difficulty (p), Discrimination (D), Point-Biserial Correlation (r_pb) — items with ≥5 attempts</p>
+        <div style="overflow-x:auto" id="item-analysis-container"></div>
+      </div>
+
+      <!-- Section 5: Correlation Matrix -->
+      <div class="section">
+        <h2><span class="icon">🔗</span> Correlation Analysis (Correlation Matrix)</h2>
+        <div class="research-grid">
+          <div class="research-card">
+            <h3>Mode Score Correlations</h3>
+            <div class="correlation-matrix" id="correlation-container"></div>
+          </div>
+          <div class="research-card">
+            <h3>📉 Time-Accuracy Relationship</h3>
+            <div class="chart-container"><canvas id="time-accuracy-chart"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 6: Comparative Analysis -->
+      <div class="section">
+        <h2><span class="icon">⚖️</span> Comparative Analysis</h2>
+        <div id="comparative-container"></div>
+      </div>
+
+      <!-- Section 7: Learning Curve -->
+      <div class="section">
+        <h2><span class="icon">📈</span> Learning Curve Analysis</h2>
+        <div class="research-grid">
+          <div class="research-card">
+            <h3>Score Trend by Session</h3>
+            <div class="chart-container"><canvas id="learning-curve-chart"></canvas></div>
+          </div>
+          <div class="research-card">
+            <h3>⏱️ Response Time Distribution</h3>
+            <div class="chart-container"><canvas id="time-dist-chart"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 8: Performance Categories -->
+      <div class="section">
+        <h2><span class="icon">🏅</span> Performance Categories</h2>
+        <div class="research-grid">
+          <div class="research-card">
+            <h3>Overall Performance Distribution</h3>
+            <div class="chart-container"><canvas id="performance-pie-chart"></canvas></div>
+          </div>
+          <div class="research-card" id="performance-table-container">
+            <h3>Performance Category Table by Mode</h3>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 9: Paper-Ready Summary -->
+      <div class="section">
+        <h2><span class="icon">📝</span> Paper-Ready Summary Tables</h2>
+        <p style="color:var(--text2);font-size:0.85rem;margin-bottom:12px">These tables can be inserted directly into a research paper. Download as an HTML file using the "Paper-Ready Tables" export button.</p>
+        <div id="paper-tables-container"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Session Detail Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<script>
+const API = (() => {
+  const p = '__PORT_8000__';
+  return p.startsWith('__') ? 'http://localhost:8000' : p;
+})();
+
+let adminToken = '';
+let currentTab = 'overview';
+let dashboardData = null;
+
+// === AUTH ===
+async function doLogin() {
+  const pw = document.getElementById('admin-pw').value;
+  try {
+    const res = await fetch(`${API}/api/admin/login`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({password: pw})
+    });
+    if (!res.ok) throw new Error('Authentication failed');
+    const data = await res.json();
+    adminToken = data.token;
+    document.getElementById('login-section').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    refreshDashboard();
+  } catch(e) {
+    document.getElementById('login-error').textContent = 'Incorrect password';
+  }
+}
+
+document.getElementById('admin-pw').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+function logout() {
+  adminToken = '';
+  document.getElementById('login-section').style.display = 'flex';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('admin-pw').value = '';
+}
+
+function authHeaders() {
+  return {'Authorization': `Bearer ${adminToken}`, 'Content-Type': 'application/json'};
+}
+
+// === DASHBOARD ===
+async function refreshDashboard() {
+  try {
+    const res = await fetch(`${API}/api/admin/dashboard`, {headers: authHeaders()});
+    if (!res.ok) { logout(); return; }
+    dashboardData = await res.json();
+    renderOverview();
+    renderModeStats();
+    renderHardQuestions();
+    renderDailyChart();
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+function renderOverview() {
+  const o = dashboardData.overview;
+  document.getElementById('stat-grid').innerHTML = `
+    <div class="stat-card accent">
+      <div class="label">Total Training Sessions</div>
+      <div class="value">${o.total_sessions}</div>
+      <div class="sub">Today: ${o.today_sessions}</div>
+    </div>
+    <div class="stat-card green">
+      <div class="label">Completion Rate</div>
+      <div class="value">${o.completion_rate}%</div>
+      <div class="sub">${o.total_completed}/${o.total_sessions} completed</div>
+    </div>
+    <div class="stat-card yellow">
+      <div class="label">Average Score</div>
+      <div class="value">${Math.round(o.avg_score)}</div>
+      <div class="sub">Based on completed sessions</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="label">Today's Participants</div>
+      <div class="value">${o.today_sessions}</div>
+      <div class="sub">${new Date().toLocaleDateString('ko-KR')}</div>
+    </div>
+  `;
+}
+
+const MODE_NAMES = {
+  triage: {icon: '🚑', name: 'START Triage', color: 'var(--red)'},
+  quiz: {icon: '📋', name: 'Disaster Quiz', color: 'var(--green)'},
+  cbrne: {icon: '☢️', name: 'CBRNE Response', color: 'var(--purple)'},
+  mci: {icon: '🏥', name: 'MCI Commander', color: 'var(--yellow)'},
+  ethics: {icon: '⚖️', name: 'Ethical Dilemma', color: 'var(--cyan)'},
+  leadership: {icon: '🎖️', name: 'Leadership Challenge', color: 'var(--purple)'},
+  teamwork: {icon: '🤝', name: 'Teamwork Mission', color: 'var(--orange)'},
+  boss: {icon: '👹', name: 'Boss Round', color: 'var(--red)'},
+  cbrneAdv: {icon: '☣️', name: 'Advanced CBRNE', color: 'var(--orange)'},
+  cbrneAdvScenario: {icon: '☣️', name: 'CBRNE Scenario', color: 'var(--orange)'},
+  cbrneAdvBoss: {icon: '☣️', name: 'CBRNE Boss', color: 'var(--orange)'},
+  tactical: {icon: '🎯', name: 'Tactical Medicine', color: 'var(--green)'},
+  tacticalScenario: {icon: '🎯', name: 'Tactical Scenario', color: 'var(--green)'},
+  tacticalBoss: {icon: '🎯', name: 'Tactical Boss', color: 'var(--green)'},
+  ctm: {icon: '🛡️', name: 'CTM', color: 'var(--red)'},
+  ctmScenario: {icon: '🛡️', name: 'CTM Scenario', color: 'var(--red)'},
+  ctmBoss: {icon: '🛡️', name: 'CTM Boss', color: 'var(--red)'},
+  campaign: {icon: '⚔️', name: 'Campaign Mode', color: 'var(--yellow)'},
+  campaign_urban_fire: {icon: '🔥', name: 'Campaign: Urban Fire', color: 'var(--orange)'},
+  campaign_chemical: {icon: '☣️', name: 'Campaign: Chemical Terror', color: 'var(--purple)'},
+  campaign_biological: {icon: '🦠', name: 'Campaign: Biological Terror', color: 'var(--green)'},
+  campaign_nuclear: {icon: '☢️', name: 'Campaign: Nuclear', color: 'var(--yellow)'},
+  campaign_active_shooter: {icon: '🎯', name: 'Campaign: Active Shooter', color: 'var(--red)'},
+  campaign_multi_terror: {icon: '💀', name: 'Campaign: Multi-Terror', color: 'var(--red)'}
+};
+
+// Helper: resolve mode name with campaign sub-mode support
+function getModeName(mode) {
+  if (MODE_NAMES[mode]) return MODE_NAMES[mode];
+  // Campaign sub-modes: campaign_urban_fire_ch0 → match campaign_urban_fire
+  if (mode && mode.startsWith('campaign_')) {
+    // Try matching without _chN suffix
+    var base = mode.replace(/_ch\d+$/, '').replace(/_q\d+$/, '');
+    if (MODE_NAMES[base]) return MODE_NAMES[base];
+    // Generic campaign fallback
+    return {icon: '⚔️', name: 'Campaign: ' + base.replace('campaign_', ''), color: 'var(--yellow)'};
+  }
+  return {icon: '🎯', name: mode, color: 'var(--accent)'};
+}
+
+function renderModeStats() {
+  const stats = dashboardData.mode_stats;
+  const container = document.getElementById('mode-stats');
+  const detailContainer = document.getElementById('mode-detail-stats');
+  
+  const html = stats.map(s => {
+    const m = getModeName(s.mode);
+    const acc = s.avg_accuracy || 0;
+    const barColor = acc >= 80 ? 'var(--green)' : acc >= 60 ? 'var(--yellow)' : 'var(--red)';
+    return `
+      <div class="mode-stat-card">
+        <h3>${m.icon} ${m.name}</h3>
+        <div class="stats-row"><span>Attempts</span><span>${s.attempts}</span></div>
+        <div class="stats-row"><span>Avg. Score</span><span>${Math.round(s.avg_score || 0)} pts</span></div>
+        <div class="stats-row"><span>Avg. Accuracy</span><span>${Math.round(acc)}%</span></div>
+        <div class="progress"><div class="progress-bar" style="width:${acc}%;background:${barColor}"></div></div>
+        <div class="stats-row"><span>Avg. Time</span><span>${Math.round(s.avg_time || 0)}s</span></div>
+      </div>
+    `;
+  }).join('');
+  
+  container.innerHTML = html || '<p style="color:var(--text2);text-align:center;padding:20px">No data available yet</p>';
+  detailContainer.innerHTML = html || '<p style="color:var(--text2);text-align:center;padding:20px">No data available yet</p>';
+}
+
+function renderHardQuestions() {
+  const tbody = document.querySelector('#hard-questions-table tbody');
+  const qs = dashboardData.hard_questions;
+  tbody.innerHTML = qs.map(q => {
+    const acc = Math.round(q.accuracy || 0);
+    const cls = acc < 30 ? 'badge-red' : acc < 60 ? 'badge-yellow' : 'badge-green';
+    return `<tr>
+      <td>${q.question_id}</td>
+      <td><span class="badge badge-blue">${q.mode}</span></td>
+      <td>${q.total_attempts}</td>
+      <td><span class="badge ${cls}">${acc}%</span></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text2)">Insufficient data (minimum 3 attempts required)</td></tr>';
+}
+
+function renderDailyChart() {
+  const chart = document.getElementById('daily-chart');
+  const data = dashboardData.daily_trend;
+  if (!data.length) {
+    chart.innerHTML = '<p style="color:var(--text2);text-align:center;width:100%;align-self:center">No data available yet</p>';
+    return;
+  }
+  const maxSessions = Math.max(...data.map(d => d.sessions), 1);
+  chart.innerHTML = data.map(d => {
+    const h = Math.max(d.sessions / maxSessions * 160, 4);
+    const date = d.date.slice(5);
+    return `<div class="chart-bar" style="height:${h}px">
+      <div class="tooltip">${date}: ${d.sessions} sessions, avg. ${Math.round(d.avg_score || 0)} pts</div>
+    </div>`;
+  }).join('');
+}
+
+// === SESSIONS ===
+let sessionsPage = 1;
+
+async function searchSessions() {
+  sessionsPage = 1;
+  await loadSessions();
+}
+
+async function loadSessions(page) {
+  if (page) sessionsPage = page;
+  const search = document.getElementById('search-nickname').value;
+  const res = await fetch(`${API}/api/admin/sessions?page=${sessionsPage}&search=${encodeURIComponent(search)}`, {headers: authHeaders()});
+  const data = await res.json();
+  
+  const tbody = document.querySelector('#sessions-table tbody');
+  tbody.innerHTML = data.sessions.map(s => {
+    const modes = JSON.parse(s.modes_completed || '[]');
+    const modeBadges = modes.map(m => {
+      const info = getModeName(m);
+      return `<span class="badge badge-blue">${info.icon}</span>`;
+    }).join(' ');
+    return `<tr>
+      <td><strong>${s.nickname}</strong></td>
+      <td>${new Date(s.started_at).toLocaleString('en-US')}</td>
+      <td>${s.total_score}</td>
+      <td>Lv.${s.max_level}</td>
+      <td>${s.max_streak}</td>
+      <td>${modeBadges || '-'}</td>
+      <td><button onclick="viewSession('${s.session_id}')" style="padding:4px 8px;border:1px solid var(--accent);border-radius:4px;background:transparent;color:var(--accent);cursor:pointer;font-size:0.75rem">Details</button></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text2)">No trainee data available</td></tr>';
+  
+  // Pagination
+  const totalPages = Math.ceil(data.total / data.per_page);
+  const pag = document.getElementById('sessions-pagination');
+  if (totalPages > 1) {
+    let buttons = '';
+    for (let i = 1; i <= Math.min(totalPages, 10); i++) {
+      buttons += `<button class="${i === sessionsPage ? 'active' : ''}" onclick="loadSessions(${i})">${i}</button>`;
+    }
+    pag.innerHTML = buttons;
+  } else {
+    pag.innerHTML = '';
+  }
+}
+
+async function viewSession(sessionId) {
+  const res = await fetch(`${API}/api/admin/session/${sessionId}`, {headers: authHeaders()});
+  const data = await res.json();
+  const s = data.session;
+  const modes = data.mode_results;
+  const responses = data.question_responses;
+  
+  document.getElementById('modal-content').innerHTML = `
+    <h2>📋 ${s.nickname} — Session Details</h2>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+      <div class="stat-card"><div class="label">Total Score</div><div class="value" style="font-size:1.5rem">${s.total_score}</div></div>
+      <div class="stat-card"><div class="label">Level</div><div class="value" style="font-size:1.5rem">Lv.${s.max_level}</div></div>
+      <div class="stat-card"><div class="label">Max Streak</div><div class="value" style="font-size:1.5rem">${s.max_streak}</div></div>
+    </div>
+    <p style="color:var(--text2);font-size:0.85rem;margin-bottom:16px">
+      Start: ${new Date(s.started_at).toLocaleString('en-US')} | 
+      End: ${s.ended_at ? new Date(s.ended_at).toLocaleString('en-US') : 'In Progress'} |
+      Device: ${s.device_info || 'Unknown'}
+    </p>
+    <h3 style="margin-bottom:8px">🎮 Results by Mode</h3>
+    <table>
+      <thead><tr><th>Mode</th><th>Score</th><th>Correct/Total</th><th>Time Spent</th></tr></thead>
+      <tbody>${modes.map(m => {
+        const info = getModeName(m.mode);
+        return `<tr>
+          <td>${info.icon} ${info.name}</td>
+          <td>${m.score} pts</td>
+          <td>${m.correct_answers}/${m.total_questions}</td>
+          <td>${m.time_spent_sec}s</td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="4">No mode results</td></tr>'}</tbody>
+    </table>
+    <h3 style="margin:16px 0 8px">📝 Question Responses (Last 50)</h3>
+    <table>
+      <thead><tr><th>Question</th><th>Mode</th><th>Answer Chosen</th><th>Correct?</th><th>Time</th></tr></thead>
+      <tbody>${responses.slice(0, 50).map(r => `<tr>
+        <td>${r.question_id}</td>
+        <td>${r.mode}</td>
+        <td>${r.selected_answer}</td>
+        <td>${r.is_correct ? '<span class="badge badge-green">O</span>' : '<span class="badge badge-red">X</span>'}</td>
+        <td>${r.time_taken_sec}s</td>
+      </tr>`).join('') || '<tr><td colspan="5">No response data</td></tr>'}</tbody>
+    </table>
+  `;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('show');
+}
+
+// === QUESTION ANALYTICS ===
+async function filterQuestions(mode) {
+  document.querySelectorAll('#mode-filter-tabs .tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  
+  const res = await fetch(`${API}/api/admin/analytics/questions?mode=${mode}`, {headers: authHeaders()});
+  const data = await res.json();
+  
+  const tbody = document.querySelector('#question-analytics-table tbody');
+  tbody.innerHTML = data.questions.map(q => {
+    const acc = Math.round(q.accuracy || 0);
+    const cls = acc < 30 ? 'badge-red' : acc < 60 ? 'badge-yellow' : 'badge-green';
+    return `<tr>
+      <td>${q.question_id}</td>
+      <td><span class="badge badge-blue">${q.mode}</span></td>
+      <td>${q.total_attempts}</td>
+      <td>${q.correct_count}</td>
+      <td><span class="badge ${cls}">${acc}%</span></td>
+      <td>${Math.round(q.avg_time || 0)}s</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text2)">No data</td></tr>';
+}
+
+// === TABS ===
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('#main-tabs .tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`#main-tabs .tab[data-tab="${tab}"]`).classList.add('active');
+  document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+  document.getElementById(`tab-${tab}`).style.display = 'block';
+  
+  if (tab === 'sessions') loadSessions();
+  if (tab === 'questions') filterQuestions('');
+  if (tab === 'research') loadResearchAnalysis();
+}
+
+// === EXPORT & CLEAR ===
+async function exportCSV() {
+  const res = await fetch(`${API}/api/admin/export/csv`, {headers: authHeaders()});
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `students_export_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function clearData() {
+  if (!confirm('⚠️ All trainee data will be permanently deleted. Continue?')) return;
+  if (!confirm('Are you sure? This action cannot be undone.')) return;
+  await fetch(`${API}/api/admin/sessions/clear`, {method: 'DELETE', headers: authHeaders()});
+  refreshDashboard();
+}
+
+// === RESEARCH ANALYSIS ===
+let researchData = null;
+let researchCharts = {};
+
+// Set Chart.js dark theme defaults
+if (typeof Chart !== 'undefined') {
+  Chart.defaults.color = '#8b8fa3';
+  Chart.defaults.borderColor = '#2e3142';
+  Chart.defaults.font.family = "'Pretendard','Noto Sans KR',system-ui,sans-serif";
+}
+
+async function loadResearchAnalysis() {
+  // Set dark defaults each time (in case Chart.js loaded after first call)
+  if (typeof Chart !== 'undefined') {
+    Chart.defaults.color = '#8b8fa3';
+    Chart.defaults.borderColor = '#2e3142';
+  }
+  document.getElementById('research-loading').style.display = 'block';
+  document.getElementById('research-content').style.display = 'none';
+
+  try {
+    const res = await fetch(`${API}/api/admin/research/analysis`, {headers: authHeaders()});
+    if (!res.ok) throw new Error('Analysis failed (' + res.status + ')');
+    researchData = await res.json();
+
+    document.getElementById('research-loading').style.display = 'none';
+    document.getElementById('research-content').style.display = 'block';
+
+    renderDescriptiveStats();
+    renderScoreDistChart();
+    renderModeComparisonChart();
+    renderReliability();
+    renderItemAnalysis();
+    renderCorrelationMatrix();
+    renderTimeAccuracyChart();
+    renderComparativeAnalysis();
+    renderLearningCurve();
+    renderTimeDistChart();
+    renderPerformanceCategories();
+    renderPaperTables();
+  } catch(e) {
+    document.getElementById('research-loading').innerHTML =
+      '<p style="color:var(--red)">Could not load analysis data: ' + e.message + '</p>';
+  }
+}
+
+function destroyChart(id) {
+  if (researchCharts[id]) {
+    researchCharts[id].destroy();
+    delete researchCharts[id];
+  }
+}
+
+function fmt(v, decimals) {
+  if (v === null || v === undefined || isNaN(v)) return '-';
+  return Number(v).toFixed(decimals !== undefined ? decimals : 2);
+}
+
+// --- 1. Descriptive Statistics ---
+function renderDescriptiveStats() {
+  const container = document.getElementById('descriptive-table-container');
+  const d = researchData && researchData.descriptive;
+  if (!d) { container.innerHTML = '<p style="color:var(--text2)">Insufficient data</p>'; return; }
+
+  const rows = [];
+  // Overall row
+  if (d.overall) {
+    const o = d.overall;
+    rows.push(buildDescRow('All', o));
+  }
+  // By mode rows
+  if (d.by_mode) {
+    Object.entries(d.by_mode).forEach(([mode, stats]) => {
+      const info = getModeName(mode);
+      rows.push(buildDescRow(info.icon + ' ' + info.name, stats));
+    });
+  }
+
+  if (!rows.length) { container.innerHTML = '<p style="color:var(--text2)">Insufficient data</p>'; return; }
+
+  container.innerHTML = `
+    <table class="stat-table">
+      <thead><tr>
+        <th>Mode</th><th class="num">N</th><th class="num">M</th><th class="num">SD</th>
+        <th class="num">Median</th><th class="num">Min</th><th class="num">Max</th>
+        <th class="num">Skewness</th><th class="num">Kurtosis</th><th>95% CI</th>
+      </tr></thead>
+      <tbody>${rows.join('')}</tbody>
+    </table>`;
+}
+
+function buildDescRow(label, s) {
+  if (!s) return '';
+  const ci = s.ci_95 ? `[${fmt(s.ci_95[0])}, ${fmt(s.ci_95[1])}]` : '-';
+  return `<tr>
+    <td><strong>${label}</strong></td>
+    <td class="num">${s.n || '-'}</td>
+    <td class="num">${fmt(s.mean)}</td>
+    <td class="num">${fmt(s.sd)}</td>
+    <td class="num">${fmt(s.median)}</td>
+    <td class="num">${fmt(s.min)}</td>
+    <td class="num">${fmt(s.max)}</td>
+    <td class="num">${fmt(s.skewness)}</td>
+    <td class="num">${fmt(s.kurtosis)}</td>
+    <td class="num">${ci}</td>
+  </tr>`;
+}
+
+// --- 2. Score Distribution Chart ---
+function renderScoreDistChart() {
+  destroyChart('scoreDist');
+  const canvas = document.getElementById('score-dist-chart');
+  const d = researchData && researchData.score_distribution && researchData.score_distribution.overall;
+  if (!d || !d.bins || !d.counts) {
+    canvas.parentElement.innerHTML = '<p style="color:var(--text2);text-align:center;padding:40px">Insufficient data</p>';
+    return;
+  }
+  researchCharts['scoreDist'] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: d.bins.map(b => b + ' pts'),
+      datasets: [{
+        label: 'Number of Examinees',
+        data: d.counts,
+        backgroundColor: 'rgba(68,138,255,0.6)',
+        borderColor: '#448aff',
+        borderWidth: 1,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#2e3142' }, ticks: { color: '#8b8fa3' } },
+        y: { grid: { color: '#2e3142' }, ticks: { color: '#8b8fa3' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+// --- 3. Mode Comparison Chart ---
+function renderModeComparisonChart() {
+  destroyChart('modeComp');
+  const canvas = document.getElementById('mode-comparison-chart');
+  const d = researchData && researchData.descriptive && researchData.descriptive.by_mode;
+  if (!d || !Object.keys(d).length) {
+    canvas.parentElement.innerHTML = '<p style="color:var(--text2);text-align:center;padding:40px">Insufficient data</p>';
+    return;
+  }
+  const entries = Object.entries(d).filter(([,s]) => s && s.mean !== null && s.mean !== undefined);
+  const labels = entries.map(([mode]) => {
+    const info = getModeName(mode);
+    return info.name;
+  });
+  const means = entries.map(([,s]) => s.mean);
+  const cis = entries.map(([,s]) => s.ci_95 ? (s.ci_95[1] - s.ci_95[0]) / 2 : 0);
+
+  researchCharts['modeComp'] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Average Score',
+        data: means,
+        backgroundColor: entries.map(([mode]) => {
+          const m = getModeName(mode);
+          return m ? m.color.replace('var(--red)', '#ff3b5c').replace('var(--green)', '#00e676')
+            .replace('var(--purple)', '#b388ff').replace('var(--yellow)', '#ffca28')
+            .replace('var(--cyan)', '#00e5ff').replace('var(--orange)', '#ff9100')
+            .replace('var(--accent)', '#448aff') : '#448aff';
+        }).map(c => c + '99'),
+        borderColor: entries.map(([mode]) => {
+          const m = getModeName(mode);
+          return m ? m.color.replace('var(--red)', '#ff3b5c').replace('var(--green)', '#00e676')
+            .replace('var(--purple)', '#b388ff').replace('var(--yellow)', '#ffca28')
+            .replace('var(--cyan)', '#00e5ff').replace('var(--orange)', '#ff9100')
+            .replace('var(--accent)', '#448aff') : '#448aff';
+        }),
+        borderWidth: 1,
+        borderRadius: 4,
+        errorBars: cis
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#2e3142' }, ticks: { color: '#8b8fa3' }, beginAtZero: true },
+        y: { grid: { color: '#2e3142' }, ticks: { color: '#8b8fa3', font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+// --- 4. Reliability ---
+function renderReliability() {
+  const container = document.getElementById('reliability-container');
+  const d = researchData && researchData.reliability;
+  if (!d || !Object.keys(d).length) {
+    container.innerHTML = '<p style="color:var(--text2)">Insufficient data</p>'; return;
+  }
+  let html = '<div class="research-grid">';
+  Object.entries(d).forEach(([mode, r]) => {
+    if (!r) return;
+    const info = getModeName(mode);
+    const alpha = r.cronbach_alpha;
+    let alphaCls = 'alpha-poor', alphaLabel = 'Unacceptable (< 0.60)';
+    if (alpha >= 0.80) { alphaCls = 'alpha-good'; alphaLabel = 'Excellent (≥ 0.80)'; }
+    else if (alpha >= 0.60) { alphaCls = 'alpha-acceptable'; alphaLabel = 'Acceptable (≥ 0.60)'; }
+    html += `
+      <div class="research-card">
+        <h3>${info.icon} ${info.name}</h3>
+        <table class="stat-table">
+          <tr><td>Cronbach's α</td><td class="num"><strong>${fmt(alpha)}</strong>
+            <span class="alpha-badge ${alphaCls}" style="margin-left:8px">${alphaLabel}</span></td></tr>
+          ${r.split_half !== undefined ? `<tr><td>Split-Half Reliability</td><td class="num">${fmt(r.split_half)}</td></tr>` : ''}
+          <tr><td>SEM</td><td class="num">${fmt(r.sem)}</td></tr>
+          <tr><td>Number of Items</td><td class="num">${r.n_items || '-'}</td></tr>
+        </table>
+      </div>`;
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+// --- 5. Item Analysis ---
+let itemSortCol = 'difficulty', itemSortAsc = true;
+
+function renderItemAnalysis(sortCol, asc) {
+  if (sortCol !== undefined) { itemSortCol = sortCol; itemSortAsc = asc; }
+  const container = document.getElementById('item-analysis-container');
+  const items = researchData && researchData.item_analysis;
+  if (!items || !items.length) {
+    container.innerHTML = '<p style="color:var(--text2)">Insufficient data (no items with ≥5 attempts)</p>'; return;
+  }
+
+  const sorted = [...items].sort((a, b) => {
+    let va = a[itemSortCol], vb = b[itemSortCol];
+    if (typeof va === 'string') va = va.toLowerCase();
+    if (typeof vb === 'string') vb = vb.toLowerCase();
+    if (va < vb) return itemSortAsc ? -1 : 1;
+    if (va > vb) return itemSortAsc ? 1 : -1;
+    return 0;
+  });
+
+  function sortBtn(col, label) {
+    const arrow = itemSortCol === col ? (itemSortAsc ? ' ▲' : ' ▼') : '';
+    return `<span style="cursor:pointer;user-select:none" onclick="renderItemAnalysis('${col}',${itemSortCol===col ? !itemSortAsc : true})">${label}${arrow}</span>`;
+  }
+
+  function ratingClass(r) {
+    if (!r) return '';
+    const rl = r.toLowerCase();
+    if (rl === 'good' || rl === 'Excellent') return 'item-good';
+    if (rl === 'revise' || rl === 'Needs Revision') return 'item-revise';
+    return 'item-poor';
+  }
+
+  container.innerHTML = `
+    <table class="stat-table">
+      <thead><tr>
+        <th>${sortBtn('question_id', 'Question ID')}</th>
+        <th>${sortBtn('mode', 'Mode')}</th>
+        <th>${sortBtn('n', 'N')}</th>
+        <th>${sortBtn('difficulty', 'Difficulty (p)')}</th>
+        <th>${sortBtn('discrimination', 'Discrimination (D)')}</th>
+        <th>${sortBtn('rpb', 'rpb')}</th>
+        <th>${sortBtn('rating', 'Rating')}</th>
+      </tr></thead>
+      <tbody>${sorted.map(item => {
+        const cls = ratingClass(item.rating);
+        const info = getModeName(item.mode);
+        return `<tr>
+          <td><code>${item.question_id}</code></td>
+          <td>${info.name || item.mode}</td>
+          <td class="num">${item.n || '-'}</td>
+          <td class="num">${fmt(item.difficulty)}</td>
+          <td class="num">${fmt(item.discrimination)}</td>
+          <td class="num">${fmt(item.rpb)}</td>
+          <td class="${cls}"><strong>${item.rating || '-'}</strong></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+}
+
+// --- 6. Correlation Matrix ---
+function renderCorrelationMatrix() {
+  const container = document.getElementById('correlation-container');
+  const d = researchData && researchData.correlation_matrix;
+  if (!d || !d.modes || !d.matrix) {
+    container.innerHTML = '<p style="color:var(--text2)">Insufficient data</p>'; return;
+  }
+  const modes = d.modes;
+  const matrix = d.matrix;
+
+  function corrColor(r) {
+    const abs = Math.abs(r);
+    const a = Math.min(abs, 1);
+    if (r > 0) return `rgba(68,138,255,${0.1 + a * 0.7})`;
+    return `rgba(255,59,92,${0.1 + a * 0.7})`;
+  }
+
+  let html = '<table class="stat-table"><thead><tr><th></th>';
+  modes.forEach(m => {
+    const info = getModeName(m);
+    html += `<th class="corr-cell">${info.name || m}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  matrix.forEach((row, i) => {
+    const infoI = getModeName(modes[i)] || {name: modes[i]};
+    html += `<tr><td><strong>${infoI.name || modes[i]}</strong></td>`;
+    row.forEach((r, j) => {
+      const bg = i === j ? 'background:var(--surface2)' : `background:${corrColor(r)}`;
+      const txt = i === j ? '-' : fmt(r);
+      html += `<td class="corr-cell num" style="${bg}">${txt}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+// --- 7. Time-Accuracy Scatter ---
+function renderTimeAccuracyChart() {
+  destroyChart('timeAcc');
+  const canvas = document.getElementById('time-accuracy-chart');
+  const d = researchData && researchData.time_accuracy && researchData.time_accuracy.by_mode;
+  if (!d || !d.length) {
+    canvas.parentElement.innerHTML = '<p style="color:var(--text2);text-align:center;padding:40px">Insufficient data</p>';
+    return;
+  }
+  const colors = ['#448aff','#00e676','#ff3b5c','#ffca28','#b388ff','#ff9100','#00e5ff'];
+  researchCharts['timeAcc'] = new Chart(canvas, {
+    type: 'scatter',
+    data: {
+      datasets: d.map((item, i) => {
+        const info = getModeName(item.mode);
+        return {
+          label: info.name || item.mode,
+          data: [{x: item.avg_time, y: item.avg_accuracy}],
+          backgroundColor: colors[i % colors.length] + 'cc',
+          borderColor: colors[i % colors.length],
+          pointRadius: 8,
+          pointHoverRadius: 10
+        };
+      })
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#8b8fa3', font: { size: 11 } } } },
+      scales: {
+        x: { title: { display: true, text: 'Avg. Response Time (s)', color: '#8b8fa3' },
+             grid: { color: '#2e3142' }, ticks: { color: '#8b8fa3' } },
+        y: { title: { display: true, text: 'Avg. Accuracy (%)', color: '#8b8fa3' },
+             grid: { color: '#2e3142' }, ticks: { color: '#8b8fa3' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+// --- 8. Comparative Analysis ---
+function renderComparativeAnalysis() {
+  const container = document.getElementById('comparative-container');
+  const d = researchData && researchData.comparative;
+  if (!d) { container.innerHTML = '<p style="color:var(--text2)">Insufficient data</p>'; return; }
+
+  let html = '';
+
+  // ANOVA summary
+  if (d.anova) {
+    const a = d.anova;
+    const sig = a.p_value !== null && a.p_value < 0.05 ? '<span style="color:var(--red)">*Significant</span>' : 'Non-significant';
+    html += `
+      <div class="research-card" style="margin-bottom:16px">
+        <h3>One-Way ANOVA</h3>
+        <table class="stat-table">
+          <thead><tr><th>F</th><th>df (between)</th><th>df (within)</th><th>p</th><th>Significance</th></tr></thead>
+          <tbody><tr>
+            <td class="num">${fmt(a.f_stat)}</td>
+            <td class="num">${a.df_between || '-'}</td>
+            <td class="num">${a.df_within || '-'}</td>
+            <td class="num">${a.p_value !== null ? fmt(a.p_value, 3) : '-'}</td>
+            <td>${sig}</td>
+          </tr></tbody>
+        </table>
+      </div>`;
+  }
+
+  // t-test table
+  if (d.t_tests && d.t_tests.length) {
+    function sigStars(p) {
+      if (p === null || p === undefined) return '';
+      if (p < 0.001) return '<sup class="significance">***</sup>';
+      if (p < 0.01) return '<sup class="significance">**</sup>';
+      if (p < 0.05) return '<sup class="significance">*</sup>';
+      return '';
+    }
+    html += `
+      <div style="overflow-x:auto">
+      <table class="stat-table">
+        <thead><tr>
+          <th>Mode A</th><th>Mode B</th>
+          <th class="num">t</th><th class="num">df</th>
+          <th class="num">p</th><th class="num">Cohen's d</th><th>Sig.</th>
+        </tr></thead>
+        <tbody>${d.t_tests.map(t => {
+          const infoA = getModeName(t.mode_a);
+          const infoB = getModeName(t.mode_b);
+          const stars = sigStars(t.p_value);
+          const sigCls = t.significant ? 'color:var(--green)' : 'color:var(--text2)';
+          return `<tr>
+            <td>${infoA.name || t.mode_a}</td>
+            <td>${infoB.name || t.mode_b}</td>
+            <td class="num">${fmt(t.t_stat)}</td>
+            <td class="num">${t.df !== null ? t.df : '-'}</td>
+            <td class="num">${t.p_value !== null ? fmt(t.p_value, 3) : '-'}${stars}</td>
+            <td class="num">${fmt(t.cohens_d)}</td>
+            <td style="${sigCls}">${t.significant ? 'Significant*' : 'Non-significant'}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+      <p style="color:var(--text2);font-size:0.75rem;margin-top:8px">*p&lt;.05 &nbsp;**p&lt;.01 &nbsp;***p&lt;.001</p>`;
+  }
+
+  container.innerHTML = html || '<p style="color:var(--text2)">Insufficient data</p>';
+}
+
+// --- 9. Learning Curve ---
+function renderLearningCurve() {
+  destroyChart('learnCurve');
+  const canvas = document.getElementById('learning-curve-chart');
+  const d = researchData && researchData.learning_curve;
+  if (!d || !d.session_scores || !d.session_scores.length) {
+    canvas.parentElement.innerHTML = '<p style="color:var(--text2);text-align:center;padding:40px">Insufficient data (no returning visitors)</p>';
+    return;
+  }
+  const scores = d.session_scores;
+  const labels = scores.map((_, i) => `Session ${i + 1}`);
+  researchCharts['learnCurve'] = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Average Score',
+        data: scores,
+        borderColor: '#00e676',
+        backgroundColor: 'rgba(0,230,118,0.1)',
+        tension: 0.4,
+        fill: true,
+        pointBackgroundColor: '#00e676',
+        pointRadius: 5
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#8b8fa3' } } },
+      scales: {
+        x: { grid: { color: '#2e3142' }, ticks: { color: '#8b8fa3' } },
+        y: { grid: { color: '#2e3142' }, ticks: { color: '#8b8fa3' }, beginAtZero: false }
+      }
+    }
+  });
+  const card = canvas.closest('.research-card');
+  if (card && d.n_returning !== undefined) {
+    const note = document.createElement('p');
+    note.style.cssText = 'color:var(--text2);font-size:0.8rem;margin-top:8px';
+    note.textContent = `Based on ${d.n_returning} returning trainees`;
+    card.appendChild(note);
+  }
+}
+
+// --- 10. Time Distribution (box-plot like bar chart) ---
+function renderTimeDistChart() {
+  destroyChart('timeDist');
+  const canvas = document.getElementById('time-dist-chart');
+  const d = researchData && researchData.time_analysis && researchData.time_analysis.by_mode;
+  if (!d || !d.length) {
+    canvas.parentElement.innerHTML = '<p style="color:var(--text2);text-align:center;padding:40px">Insufficient data</p>';
+    return;
+  }
+  const labels = d.map(item => { const info = getModeName(item.mode); return info.name || item.mode; });
+  const medians = d.map(item => item.median);
+  const means = d.map(item => item.mean);
+  const q1 = d.map(item => item.q1);
+  const q3 = d.map(item => item.q3);
+
+  researchCharts['timeDist'] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Q1-Q3 Range', data: q3.map((v, i) => v - (q1[i] || 0)), backgroundColor: 'rgba(68,138,255,0.3)', borderColor: '#448aff', borderWidth: 1 },
+        { label: 'Median', data: medians, backgroundColor: '#00e676', borderColor: '#00e676', borderWidth: 2, type: 'bar', barThickness: 3 },
+        { label: 'Mean', data: means, type: 'line', borderColor: '#ffca28', borderDash: [4, 4], tension: 0, pointRadius: 4, pointBackgroundColor: '#ffca28', fill: false }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#8b8fa3', font: { size: 11 } } } },
+      scales: {
+        x: { grid: { color: '#2e3142' }, ticks: { color: '#8b8fa3', font: { size: 10 } } },
+        y: { title: { display: true, text: 'Time (s)', color: '#8b8fa3' }, grid: { color: '#2e3142' }, ticks: { color: '#8b8fa3' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+// --- 11. Performance Categories ---
+function renderPerformanceCategories() {
+  destroyChart('perfPie');
+  const canvas = document.getElementById('performance-pie-chart');
+  const d = researchData && researchData.performance_categories;
+  if (!d || !d.overall) {
+    canvas.parentElement.innerHTML = '<p style="color:var(--text2);text-align:center;padding:40px">Insufficient data</p>';
+    const tbl = document.getElementById('performance-table-container');
+    if (tbl) tbl.innerHTML += '<p style="color:var(--text2)">Insufficient data</p>';
+    return;
+  }
+  const overall = d.overall;
+  const catColors = { 'Excellent': '#00e676', 'Good': '#448aff', 'Average': '#ffca28', 'Below Average': '#ff9100', 'Poor': '#ff3b5c' };
+  const labels = Object.keys(overall);
+  const values = Object.values(overall);
+  const bgColors = labels.map(l => catColors[l] || '#8b8fa3');
+
+  researchCharts['perfPie'] = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{ data: values, backgroundColor: bgColors.map(c => c + 'cc'), borderColor: bgColors, borderWidth: 2 }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'right', labels: { color: '#8b8fa3', font: { size: 11 }, padding: 12 } } }
+    }
+  });
+
+  // Mode table
+  const tableContainer = document.getElementById('performance-table-container');
+  if (d.by_mode) {
+    const modes = Object.keys(d.by_mode);
+    const cats = labels;
+    let tbl = '<div style="overflow-x:auto"><table class="stat-table"><thead><tr><th>Mode</th>';
+    cats.forEach(c => tbl += `<th class="num">${c}</th>`);
+    tbl += '</tr></thead><tbody>';
+    modes.forEach(mode => {
+      const info = getModeName(mode);
+      tbl += `<tr><td>${info.name || mode}</td>`;
+      cats.forEach(c => tbl += `<td class="num">${d.by_mode[mode][c] || 0}</td>`);
+      tbl += '</tr>';
+    });
+    tbl += '</tbody></table></div>';
+    tableContainer.innerHTML += tbl;
+  } else {
+    tableContainer.innerHTML += '<p style="color:var(--text2)">Insufficient data</p>';
+  }
+}
+
+// --- 12. Paper-Ready Tables ---
+function renderPaperTables() {
+  const container = document.getElementById('paper-tables-container');
+  if (!researchData) { container.innerHTML = '<p style="color:var(--text2)">Insufficient data</p>'; return; }
+  container.innerHTML = buildPaperTablesHTML();
+}
+
+function buildPaperTablesHTML() {
+  const d = researchData;
+  let html = '<div style="font-family:serif;color:var(--text)">';
+
+  // Table 1: Participant Characteristics / Descriptive Stats
+  html += `
+    <div style="margin-bottom:32px">
+      <p style="text-align:center;font-size:0.85rem;color:var(--text2);margin-bottom:4px">Table 1</p>
+      <p style="text-align:center;font-weight:bold;margin-bottom:12px">Descriptive Statistics by Mode</p>
+      <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+        <thead>
+          <tr style="border-top:2px solid var(--text);border-bottom:1px solid var(--text)">
+            <th style="padding:6px 10px;text-align:left">Mode</th>
+            <th style="padding:6px 10px;text-align:center">N</th>
+            <th style="padding:6px 10px;text-align:center">M</th>
+            <th style="padding:6px 10px;text-align:center">SD</th>
+            <th style="padding:6px 10px;text-align:center">Median</th>
+            <th style="padding:6px 10px;text-align:center">Min</th>
+            <th style="padding:6px 10px;text-align:center">Max</th>
+            <th style="padding:6px 10px;text-align:center">Skewness</th>
+            <th style="padding:6px 10px;text-align:center">Kurtosis</th>
+          </tr>
+        </thead>
+        <tbody>`;
+  if (d.descriptive && d.descriptive.by_mode) {
+    Object.entries(d.descriptive.by_mode).forEach(([mode, s]) => {
+      if (!s) return;
+      const info = getModeName(mode);
+      html += `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px 10px">${info.name || mode}</td>
+        <td style="padding:6px 10px;text-align:center">${s.n || '-'}</td>
+        <td style="padding:6px 10px;text-align:center">${fmt(s.mean)}</td>
+        <td style="padding:6px 10px;text-align:center">${fmt(s.sd)}</td>
+        <td style="padding:6px 10px;text-align:center">${fmt(s.median)}</td>
+        <td style="padding:6px 10px;text-align:center">${fmt(s.min)}</td>
+        <td style="padding:6px 10px;text-align:center">${fmt(s.max)}</td>
+        <td style="padding:6px 10px;text-align:center">${fmt(s.skewness)}</td>
+        <td style="padding:6px 10px;text-align:center">${fmt(s.kurtosis)}</td>
+      </tr>`;
+    });
+  } else {
+    html += `<tr><td colspan="9" style="text-align:center;color:var(--text2);padding:12px">Insufficient data</td></tr>`;
+  }
+  html += `</tbody>
+        <tfoot><tr style="border-top:2px solid var(--text)">
+          <td colspan="9" style="padding:6px 10px;font-size:0.75rem;font-style:italic">Note. M = Mean; SD = Standard Deviation; upside missing values excluded.</td>
+        </tr></tfoot>
+      </table></div>
+    </div>`;
+
+  // Table 2: Reliability
+  html += `
+    <div style="margin-bottom:32px">
+      <p style="text-align:center;font-size:0.85rem;color:var(--text2);margin-bottom:4px">Table 2</p>
+      <p style="text-align:center;font-weight:bold;margin-bottom:12px">Reliability Analysis by Mode</p>
+      <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+        <thead><tr style="border-top:2px solid var(--text);border-bottom:1px solid var(--text)">
+          <th style="padding:6px 10px;text-align:left">Mode</th>
+          <th style="padding:6px 10px;text-align:center">Cronbach's α</th>
+          <th style="padding:6px 10px;text-align:center">Split-Half Reliability</th>
+          <th style="padding:6px 10px;text-align:center">SEM</th>
+          <th style="padding:6px 10px;text-align:center">No. of Items</th>
+        </tr></thead>
+        <tbody>`;
+  if (d.reliability) {
+    Object.entries(d.reliability).forEach(([mode, r]) => {
+      if (!r) return;
+      const info = getModeName(mode);
+      html += `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px 10px">${info.name || mode}</td>
+        <td style="padding:6px 10px;text-align:center">${fmt(r.cronbach_alpha)}</td>
+        <td style="padding:6px 10px;text-align:center">${r.split_half !== undefined ? fmt(r.split_half) : '-'}</td>
+        <td style="padding:6px 10px;text-align:center">${fmt(r.sem)}</td>
+        <td style="padding:6px 10px;text-align:center">${r.n_items || '-'}</td>
+      </tr>`;
+    });
+  } else {
+    html += `<tr><td colspan="5" style="text-align:center;color:var(--text2);padding:12px">Insufficient data</td></tr>`;
+  }
+  html += `</tbody>
+        <tfoot><tr style="border-top:2px solid var(--text)">
+          <td colspan="5" style="padding:6px 10px;font-size:0.75rem;font-style:italic">Note. SEM = Standard Error of Measurement. α ≥ .80 = Excellent, α ≥ .60 = Acceptable.</td>
+        </tr></tfoot>
+      </table></div>
+    </div>`;
+
+  // Table 3: Item Analysis Summary
+  html += `
+    <div style="margin-bottom:32px">
+      <p style="text-align:center;font-size:0.85rem;color:var(--text2);margin-bottom:4px">Table 3</p>
+      <p style="text-align:center;font-weight:bold;margin-bottom:12px">Item Analysis Summary</p>
+      <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+        <thead><tr style="border-top:2px solid var(--text);border-bottom:1px solid var(--text)">
+          <th style="padding:6px 10px;text-align:left">Question ID</th>
+          <th style="padding:6px 10px;text-align:left">Mode</th>
+          <th style="padding:6px 10px;text-align:center">Difficulty (p)</th>
+          <th style="padding:6px 10px;text-align:center">Discrimination (D)</th>
+          <th style="padding:6px 10px;text-align:center">r<sub>pb</sub></th>
+          <th style="padding:6px 10px;text-align:center">Rating</th>
+        </tr></thead>
+        <tbody>`;
+  if (d.item_analysis && d.item_analysis.length) {
+    d.item_analysis.forEach(item => {
+      const info = getModeName(item.mode);
+      html += `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px 10px"><code>${item.question_id}</code></td>
+        <td style="padding:6px 10px">${info.name || item.mode}</td>
+        <td style="padding:6px 10px;text-align:center">${fmt(item.difficulty)}</td>
+        <td style="padding:6px 10px;text-align:center">${fmt(item.discrimination)}</td>
+        <td style="padding:6px 10px;text-align:center">${fmt(item.rpb)}</td>
+        <td style="padding:6px 10px;text-align:center">${item.rating || '-'}</td>
+      </tr>`;
+    });
+  } else {
+    html += `<tr><td colspan="6" style="text-align:center;color:var(--text2);padding:12px">Insufficient data</td></tr>`;
+  }
+  html += `</tbody>
+        <tfoot><tr style="border-top:2px solid var(--text)">
+          <td colspan="6" style="padding:6px 10px;font-size:0.75rem;font-style:italic">Note. p = Difficulty (correct rate); D = Discrimination (U27-L27); r<sub>pb</sub> = point-biserial correlation. Items with ≥5 attempts only.</td>
+        </tr></tfoot>
+      </table></div>
+    </div>`;
+
+  // Table 4: Comparative Statistics (t-tests)
+  html += `
+    <div style="margin-bottom:32px">
+      <p style="text-align:center;font-size:0.85rem;color:var(--text2);margin-bottom:4px">Table 4</p>
+      <p style="text-align:center;font-weight:bold;margin-bottom:12px">Independent Samples t-test Between Modes</p>
+      <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+        <thead><tr style="border-top:2px solid var(--text);border-bottom:1px solid var(--text)">
+          <th style="padding:6px 10px;text-align:left">Compared Modes</th>
+          <th style="padding:6px 10px;text-align:center">t</th>
+          <th style="padding:6px 10px;text-align:center">df</th>
+          <th style="padding:6px 10px;text-align:center">p</th>
+          <th style="padding:6px 10px;text-align:center">Cohen's d</th>
+        </tr></thead>
+        <tbody>`;
+  if (d.comparative && d.comparative.t_tests && d.comparative.t_tests.length) {
+    d.comparative.t_tests.forEach(t => {
+      const infoA = getModeName(t.mode_a);
+      const infoB = getModeName(t.mode_b);
+      let stars = '';
+      if (t.p_value !== null) {
+        if (t.p_value < 0.001) stars = '***';
+        else if (t.p_value < 0.01) stars = '**';
+        else if (t.p_value < 0.05) stars = '*';
+      }
+      html += `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px 10px">${infoA.name || t.mode_a} vs. ${infoB.name || t.mode_b}</td>
+        <td style="padding:6px 10px;text-align:center">${fmt(t.t_stat)}</td>
+        <td style="padding:6px 10px;text-align:center">${t.df !== null ? t.df : '-'}</td>
+        <td style="padding:6px 10px;text-align:center">${t.p_value !== null ? fmt(t.p_value, 3) : '-'}${stars}</td>
+        <td style="padding:6px 10px;text-align:center">${fmt(t.cohens_d)}</td>
+      </tr>`;
+    });
+  } else {
+    html += `<tr><td colspan="5" style="text-align:center;color:var(--text2);padding:12px">Insufficient data</td></tr>`;
+  }
+  html += `</tbody>
+        <tfoot><tr style="border-top:2px solid var(--text)">
+          <td colspan="5" style="padding:6px 10px;font-size:0.75rem;font-style:italic">Note. *p &lt; .05. **p &lt; .01. ***p &lt; .001.</td>
+        </tr></tfoot>
+      </table></div>
+    </div>`;
+
+  // Table 5: Performance Categories
+  html += `
+    <div style="margin-bottom:32px">
+      <p style="text-align:center;font-size:0.85rem;color:var(--text2);margin-bottom:4px">Table 5</p>
+      <p style="text-align:center;font-weight:bold;margin-bottom:12px">Performance Category Distribution by Mode</p>
+      <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:0.82rem">`;
+  if (d.performance_categories && d.performance_categories.overall) {
+    const cats = Object.keys(d.performance_categories.overall);
+    html += `<thead><tr style="border-top:2px solid var(--text);border-bottom:1px solid var(--text)">
+        <th style="padding:6px 10px;text-align:left">Mode</th>
+        ${cats.map(c => `<th style="padding:6px 10px;text-align:center">${c}</th>`).join('')}
+        <th style="padding:6px 10px;text-align:center">Total</th>
+      </tr></thead><tbody>`;
+    // Overall row
+    const overallTotal = cats.reduce((s, c) => s + (d.performance_categories.overall[c] || 0), 0);
+    html += `<tr style="border-bottom:1px solid var(--border);font-weight:bold">
+      <td style="padding:6px 10px">All</td>
+      ${cats.map(c => `<td style="padding:6px 10px;text-align:center">${d.performance_categories.overall[c] || 0}</td>`).join('')}
+      <td style="padding:6px 10px;text-align:center">${overallTotal}</td>
+    </tr>`;
+    if (d.performance_categories.by_mode) {
+      Object.entries(d.performance_categories.by_mode).forEach(([mode, byMode]) => {
+        const info = getModeName(mode);
+        const total = cats.reduce((s, c) => s + (byMode[c] || 0), 0);
+        html += `<tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:6px 10px">${info.name || mode}</td>
+          ${cats.map(c => `<td style="padding:6px 10px;text-align:center">${byMode[c] || 0}</td>`).join('')}
+          <td style="padding:6px 10px;text-align:center">${total}</td>
+        </tr>`;
+      });
+    }
+  } else {
+    html += `<tbody><tr><td style="text-align:center;color:var(--text2);padding:12px">Insufficient data</td></tr>`;
+  }
+  html += `</tbody>
+        <tfoot><tr style="border-top:2px solid var(--text)">
+          <td colspan="10" style="padding:6px 10px;font-size:0.75rem;font-style:italic">Note. Values indicate number of examinees (sessions).</td>
+        </tr></tfoot>
+      </table></div>
+    </div>`;
+
+  // Table 6: Correlation Matrix
+  html += `
+    <div style="margin-bottom:32px">
+      <p style="text-align:center;font-size:0.85rem;color:var(--text2);margin-bottom:4px">Table 6</p>
+      <p style="text-align:center;font-weight:bold;margin-bottom:12px">Correlation Matrix of Mode Scores</p>
+      <div style="overflow-x:auto">`;
+  if (d.correlation_matrix && d.correlation_matrix.modes && d.correlation_matrix.matrix) {
+    const modes = d.correlation_matrix.modes;
+    const matrix = d.correlation_matrix.matrix;
+    html += `<table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+        <thead><tr style="border-top:2px solid var(--text);border-bottom:1px solid var(--text)">
+          <th style="padding:6px 10px"></th>
+          ${modes.map((m, i) => { const info = getModeName(m); return `<th style="padding:6px 10px;text-align:center">${i + 1}. ${info.name || m}</th>`; }).join('')}
+        </tr></thead>
+        <tbody>
+        ${matrix.map((row, i) => {
+          const infoI = getModeName(modes[i)] || {name: modes[i]};
+          return `<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:6px 10px"><strong>${i + 1}. ${infoI.name || modes[i]}</strong></td>
+            ${row.map((r, j) => `<td style="padding:6px 10px;text-align:center">${i === j ? '-' : fmt(r)}</td>`).join('')}
+          </tr>`;
+        }).join('')}
+        </tbody>
+        <tfoot><tr style="border-top:2px solid var(--text)">
+          <td colspan="${modes.length + 1}" style="padding:6px 10px;font-size:0.75rem;font-style:italic">Note. Pearson correlation coefficients; *p < .05, **p < .01.</td>
+        </tr></tfoot>
+      </table>`;
+  } else {
+    html += '<p style="color:var(--text2)">Insufficient data</p>';
+  }
+  html += '</div></div></div>';
+  return html;
+}
+
+// === EXPORT FUNCTIONS ===
+function exportResearchJSON() {
+  if (!researchData) { alert('No analysis data available. Please open the tab first.'); return; }
+  const blob = new Blob([JSON.stringify(researchData, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `research_analysis_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function exportRawData() {
+  try {
+    const res = await fetch(`${API}/api/admin/research/export`, {headers: authHeaders()});
+    if (!res.ok) throw new Error(res.status);
+    const blob = await res.blob();
+    const cd = res.headers.get('Content-Disposition') || '';
+    const match = cd.match(/filename="?([^"]+)"?/);
+    const filename = match ? match[1] : `raw_data_${new Date().toISOString().slice(0,10)}.csv`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert('Raw data export failed: ' + e.message);
+  }
+}
+
+function exportPaperTables() {
+  if (!researchData) { alert('No analysis data available. Please open the tab first.'); return; }
+  const content = buildPaperTablesHTML();
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Paper-Ready Tables - Disaster Medicine Survival</title>
+<style>
+body { font-family: 'Times New Roman', serif; background: #fff; color: #111; max-width: 900px; margin: 40px auto; padding: 20px; }
+table { width: 100%; border-collapse: collapse; font-size: 11pt; margin-bottom: 8px; }
+th, td { padding: 6px 10px; }
+code { font-family: monospace; }
+</style>
+</head>
+<body>
+<h1 style="font-size:14pt;text-align:center;margin-bottom:8px">Disaster Medicine Survival Education System — Statistical Tables for Research</h1>
+<p style="text-align:center;font-size:10pt;color:#555;margin-bottom:32px">Generated: ${new Date().toLocaleString('en-US')}</p>
+${content}
+</body>
+</html>`;
+  const blob = new Blob([html], {type: 'text/html;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `paper_tables_${new Date().toISOString().slice(0,10)}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
