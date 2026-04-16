@@ -1084,6 +1084,7 @@ function renderModeSelect() {
     { key: 'cbrneAdv', icon: '☣️', title: 'CBRNE Advanced', desc: 'Expert quiz & scenarios on 5 CBRNE threats', tag: 'CBRNE Expert', color: 'orange' },
     { key: 'tactical', icon: '🎯', title: 'Tactical Medicine', desc: 'TCCC/TECC tactical field emergency medicine', tag: 'Tactical Medicine', color: 'green' },
     { key: 'ctm', icon: '🛡️', title: 'Counter-Terrorism Medicine', desc: 'Expert knowledge and response in counter-terrorism medicine', tag: 'CTM', color: 'red' },
+    { key: 'hseep', icon: '📋', title: 'HSEEP Exercise Design', desc: 'Master FEMA HSEEP-based disaster exercise design', tag: 'HSEEP', color: 'blue' },
   ];
 
   const lb = [...G.leaderboard];
@@ -4380,6 +4381,13 @@ function showCTMBossResults() {
     else if (s === 'campaignBattle') renderCampaignBattle();
     else if (s === 'campaignResult') renderCampaignChapterResult();
     else if (s === 'campaignComplete') renderCampaignComplete();
+    else if (s === 'hseepMenu') renderHSEEPMenu();
+    else if (s === 'hseepQuiz') renderHSEEPQuiz();
+    else if (s === 'hseepScenario') renderHSEEPScenario();
+    else if (s === 'hseepTemplate') renderHSEEPTemplate();
+    else if (s === 'hseepCampaign') renderHSEEPCampaignMap();
+    else if (s === 'hseepCampaignChapter') renderHSEEPCampaignChapter();
+    else if (s === 'hseepCampaignResult') renderHSEEPCampaignResult();
     else _origRender();
   };
 })();
@@ -4393,6 +4401,13 @@ function showCTMBossResults() {
       G.campaignState = G.campaignState || { selectedCampaign: null, selectedRole: null };
       G.campaignProgress = G.campaignProgress || {};
       Tracker.startMode('campaign');
+      render();
+      return;
+    }
+    if (mode === 'hseep') {
+      G.screen = 'hseepMenu';
+      G.hseep = G.hseep || {};
+      Tracker.startMode('hseep');
       render();
       return;
     }
@@ -5431,4 +5446,1149 @@ function renderCampaignComplete() {
 
 // ============================================
 // END OF JRPG CAMPAIGN ENGINE
+// ============================================
+
+// ============================================
+// HSEEP GAME MODULE
+// FEMA HSEEP Exercise Design Training
+// ============================================
+
+// ---- HSEEP HELPER: get question by ID ----
+function hseepGetQuestionById(id) {
+  var q = window.HSEEP_QUIZ_QUESTIONS;
+  if (!q) return null;
+  var cats = Object.keys(q);
+  for (var i = 0; i < cats.length; i++) {
+    var arr = q[cats[i]];
+    for (var j = 0; j < arr.length; j++) {
+      if (arr[j].id === id) return arr[j];
+    }
+  }
+  return null;
+}
+
+// ---- HSEEP HELPER: category display info ----
+function hseepCategoryInfo(key) {
+  var map = {
+    doctrine: { label: 'HSEEP Doctrine', icon: '📖', desc: '17 questions — Fundamentals, 6 principles, National Preparedness Goal' },
+    exercise_types: { label: 'Exercise Types', icon: '📊', desc: '18 questions — 7 exercise types, Discussion-Based vs Operations-Based' },
+    design_development: { label: 'Design & Development', icon: '🏗️', desc: '18 questions — 5 planning meetings, SMART objectives, scenario design' },
+    conduct: { label: 'Exercise Conduct', icon: '🎬', desc: '15 questions — Briefings, controllers, MSEL injects, hotwash' },
+    evaluation: { label: 'Evaluation', icon: '📊', desc: '16 questions — EEGs, P-S-M-U scale, data analysis, observation' },
+    improvement: { label: 'Improvement Planning', icon: '📈', desc: '15 questions — AAR/IP, corrective actions, SMART fixes' },
+    documents: { label: 'Exercise Documents', icon: '📄', desc: '16 questions — SitMan, ExPlan, MSEL, C/E Handbook, PFF' },
+    core_capabilities: { label: 'Core Capabilities', icon: '🎯', desc: '15 questions — 32 core capabilities, 5 mission areas, THIRA' }
+  };
+  return map[key] || { label: key, icon: '📋', desc: '' };
+}
+
+// ============================================
+// HSEEP MENU
+// ============================================
+function renderHSEEPMenu() {
+  var app = $('app');
+  app.innerHTML = `
+    <div class="screen">
+      <div style="padding:20px 16px 0">
+        ${charBubble('mentor', 'Welcome to HSEEP Exercise Design! Choose your training path below.')}
+      </div>
+      <div style="padding:0 16px 16px">
+        <div style="text-align:center;margin-bottom:20px">
+          <div style="font-size:2.5rem">📋</div>
+          <h2 style="font-size:1.3rem;font-weight:700;margin:6px 0 4px">HSEEP Exercise Design</h2>
+          <div style="font-size:0.8rem;color:var(--text-muted)">FEMA Homeland Security Exercise and Evaluation Program</div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px">
+
+          <button id="hseepQuizBtn" style="display:flex;align-items:center;gap:14px;padding:16px;background:rgba(68,138,255,0.08);border:1px solid rgba(68,138,255,0.25);border-radius:14px;text-align:left;cursor:pointer;width:100%">
+            <div style="font-size:2rem;flex-shrink:0">📝</div>
+            <div>
+              <div style="font-weight:700;font-size:1rem;color:#448aff">HSEEP Quiz</div>
+              <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">130 questions across 8 categories — test your HSEEP knowledge</div>
+            </div>
+          </button>
+
+          <button id="hseepScenarioBtn" style="display:flex;align-items:center;gap:14px;padding:16px;background:rgba(102,187,106,0.08);border:1px solid rgba(102,187,106,0.25);border-radius:14px;text-align:left;cursor:pointer;width:100%">
+            <div style="font-size:2rem;flex-shrink:0">🏗️</div>
+            <div>
+              <div style="font-weight:700;font-size:1rem;color:#66bb6a">Exercise Design Workshop</div>
+              <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">8 scenarios — build real exercises step by step</div>
+            </div>
+          </button>
+
+          <button id="hseepTemplateBtn" style="display:flex;align-items:center;gap:14px;padding:16px;background:rgba(255,183,77,0.08);border:1px solid rgba(255,183,77,0.25);border-radius:14px;text-align:left;cursor:pointer;width:100%">
+            <div style="font-size:2rem;flex-shrink:0">📄</div>
+            <div>
+              <div style="font-weight:700;font-size:1rem;color:#ffb74d">Template Builder</div>
+              <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">SitMan / ExPlan / MSEL / EEG / AAR — interactive document guides</div>
+            </div>
+          </button>
+
+          <button id="hseepCampaignBtn" style="display:flex;align-items:center;gap:14px;padding:16px;background:linear-gradient(135deg,rgba(255,100,0,0.1),rgba(255,50,150,0.08));border:1px solid rgba(255,100,0,0.3);border-radius:14px;text-align:left;cursor:pointer;width:100%">
+            <div style="font-size:2rem;flex-shrink:0">⚔️</div>
+            <div>
+              <div style="font-weight:700;font-size:1rem;color:#ff6400">HSEEP Campaign</div>
+              <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">10-chapter RPG — From Novice Planner to Exercise Director</div>
+            </div>
+          </button>
+        </div>
+
+        <button id="hseepBackBtn" style="display:block;width:100%;padding:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:12px;cursor:pointer;font-size:0.9rem">
+          ← Back to Mission Select
+        </button>
+      </div>
+    </div>`;
+
+  document.getElementById('hseepQuizBtn').addEventListener('click', function() {
+    G.hseep = G.hseep || {};
+    G.hseep.quizState = null;
+    G.screen = 'hseepQuiz';
+    render();
+  });
+  document.getElementById('hseepScenarioBtn').addEventListener('click', function() {
+    G.hseep = G.hseep || {};
+    G.hseep.scenarioState = null;
+    G.screen = 'hseepScenario';
+    render();
+  });
+  document.getElementById('hseepTemplateBtn').addEventListener('click', function() {
+    G.hseep = G.hseep || {};
+    G.hseep.templateState = null;
+    G.screen = 'hseepTemplate';
+    render();
+  });
+  document.getElementById('hseepCampaignBtn').addEventListener('click', function() {
+    G.hseep = G.hseep || {};
+    G.screen = 'hseepCampaign';
+    render();
+  });
+  document.getElementById('hseepBackBtn').addEventListener('click', function() {
+    G.screen = 'modes';
+    render();
+  });
+}
+
+// ============================================
+// HSEEP QUIZ
+// ============================================
+function renderHSEEPQuiz() {
+  var app = $('app');
+  var qs = window.HSEEP_QUIZ_QUESTIONS;
+  if (!qs) {
+    app.innerHTML = '<div class="screen"><div style="padding:20px;text-align:center">HSEEP content not loaded.</div></div>';
+    return;
+  }
+
+  var h = G.hseep || {};
+  G.hseep = h;
+
+  // Phase: category select
+  if (!h.quizCat) {
+    var cats = Object.keys(qs);
+    var html = '<div class="screen"><div style="padding:16px">';
+    html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">';
+    html += '<button id="hseepQzBack" style="padding:8px 14px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:var(--text-muted);border-radius:8px;cursor:pointer;font-size:0.85rem">← Back</button>';
+    html += '<h2 style="font-size:1.1rem;font-weight:700;flex:1">HSEEP Quiz — Select Category</h2>';
+    html += '</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:10px">';
+    // All categories option
+    html += '<button class="hseep-cat-btn" data-cat="all" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:rgba(68,138,255,0.1);border:1px solid rgba(68,138,255,0.3);border-radius:12px;cursor:pointer;width:100%">';
+    html += '<div style="display:flex;align-items:center;gap:10px"><span style="font-size:1.3rem">🌐</span><div style="text-align:left"><div style="font-weight:700;font-size:0.95rem;color:#448aff">All Categories</div><div style="font-size:0.75rem;color:var(--text-muted)">All 130 questions — mixed</div></div></div>';
+    html += '<span style="font-size:0.8rem;color:var(--text-muted)">130 Qs</span></button>';
+    cats.forEach(function(cat) {
+      var info = hseepCategoryInfo(cat);
+      var count = qs[cat].length;
+      html += '<button class="hseep-cat-btn" data-cat="' + cat + '" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;cursor:pointer;width:100%">';
+      html += '<div style="display:flex;align-items:center;gap:10px"><span style="font-size:1.3rem">' + info.icon + '</span><div style="text-align:left"><div style="font-weight:700;font-size:0.9rem">' + info.label + '</div><div style="font-size:0.73rem;color:var(--text-muted)">' + info.desc + '</div></div></div>';
+      html += '<span style="font-size:0.8rem;color:var(--text-muted);flex-shrink:0">' + count + ' Qs</span></button>';
+    });
+    html += '</div></div></div>';
+    app.innerHTML = html;
+
+    document.getElementById('hseepQzBack').addEventListener('click', function() {
+      G.screen = 'hseepMenu'; render();
+    });
+    document.querySelectorAll('.hseep-cat-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var cat = btn.getAttribute('data-cat');
+        var pool = [];
+        if (cat === 'all') {
+          Object.keys(qs).forEach(function(c) { pool = pool.concat(qs[c]); });
+        } else {
+          pool = qs[cat].slice();
+        }
+        // Shuffle
+        for (var i = pool.length - 1; i > 0; i--) {
+          var j = Math.floor(Math.random() * (i + 1));
+          var tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+        }
+        h.quizCat = cat;
+        h.quizPool = pool;
+        h.quizIdx = 0;
+        h.quizScore = 0;
+        h.quizAnswered = false;
+        h.quizSelected = undefined;
+        h.quizStreak = 0;
+        h.quizMaxStreak = 0;
+        Tracker.startMode('hseep_quiz');
+        render();
+      });
+    });
+    return;
+  }
+
+  // Phase: quiz questions
+  var pool = h.quizPool || [];
+  if (h.quizIdx >= pool.length) {
+    // Results
+    renderHSEEPQuizResults();
+    return;
+  }
+
+  var q = pool[h.quizIdx];
+  var total = pool.length;
+  var idx = h.quizIdx;
+  var pct = Math.round((idx / total) * 100);
+  var catInfo = hseepCategoryInfo(q.category || h.quizCat);
+
+  var html = `
+    <div class="screen quiz-game">
+      <div style="padding:12px 16px 0">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <button id="hseepQzAbort" style="padding:6px 12px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:8px;cursor:pointer;font-size:0.8rem">✕ Quit</button>
+          <div style="flex:1;background:rgba(255,255,255,0.08);border-radius:6px;height:6px;overflow:hidden">
+            <div style="height:100%;background:linear-gradient(90deg,#448aff,#7c4dff);width:${pct}%;transition:width 0.3s"></div>
+          </div>
+          <div style="font-size:0.8rem;color:var(--text-muted);min-width:52px;text-align:right">${idx + 1} / ${total}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+          <span style="font-size:0.85rem">${catInfo.icon}</span>
+          <span style="font-size:0.75rem;color:var(--text-muted)">${catInfo.label}</span>
+          <span style="margin-left:auto;font-size:0.75rem;color:var(--green)">Score: ${h.quizScore}</span>
+          ${h.quizStreak >= 3 ? '<span style="font-size:0.75rem;color:var(--orange)">🔥 x' + h.quizStreak + '</span>' : ''}
+        </div>
+      </div>
+      <div class="quiz-q-card anim-in" style="margin:0 12px">
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:6px">Difficulty: ${(q.diff || 'normal').toUpperCase()}</div>
+        <div class="quiz-q-text" style="font-size:0.95rem;margin-bottom:14px">${q.q}</div>
+        <div class="quiz-opts" id="hseepQzOpts">
+          ${(q.o || []).map(function(opt, i) {
+            var letter = String.fromCharCode(65 + i);
+            var cls = '';
+            if (h.quizAnswered) {
+              if (i === q.a) cls = 'correct';
+              else if (i === h.quizSelected && i !== q.a) cls = 'wrong';
+            }
+            return '<button class="q-opt ' + cls + ' hseep-qz-opt" data-idx="' + i + '" ' + (h.quizAnswered ? 'disabled' : '') + '><span class="q-letter">' + letter + '</span><span class="q-opt-text">' + opt + '</span></button>';
+          }).join('')}
+        </div>
+        ${h.quizAnswered ? `
+          <div class="quiz-explanation" style="margin-top:12px">
+            <strong>${h.quizSelected === q.a ? '✅ Correct!' : '❌ Incorrect'}</strong><br>
+            ${q.exp || ''}
+          </div>
+          <button id="hseepQzNext" class="quiz-next-btn" style="margin-top:10px">Next Question →</button>
+        ` : ''}
+      </div>
+    </div>`;
+
+  app.innerHTML = html;
+
+  document.getElementById('hseepQzAbort').addEventListener('click', function() {
+    h.quizCat = null; h.quizPool = null; h.quizIdx = 0;
+    G.screen = 'hseepMenu'; render();
+  });
+
+  if (!h.quizAnswered) {
+    document.querySelectorAll('.hseep-qz-opt').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        if (h.quizAnswered) return;
+        var chosen = parseInt(btn.getAttribute('data-idx'));
+        h.quizAnswered = true;
+        h.quizSelected = chosen;
+        var correct = chosen === q.a;
+        if (correct) {
+          h.quizScore++;
+          h.quizStreak++;
+          if (h.quizStreak > (h.quizMaxStreak || 0)) h.quizMaxStreak = h.quizStreak;
+          addScore(50);
+          addXP(20);
+          sfx('correct');
+        } else {
+          h.quizStreak = 0;
+          sfx('wrong');
+        }
+        render();
+      });
+    });
+  } else {
+    var nextBtn = document.getElementById('hseepQzNext');
+    if (nextBtn) nextBtn.addEventListener('click', function() {
+      h.quizIdx++;
+      h.quizAnswered = false;
+      h.quizSelected = undefined;
+      Tracker.startQuestion();
+      render();
+    });
+  }
+}
+
+function renderHSEEPQuizResults() {
+  var app = $('app');
+  var h = G.hseep || {};
+  var total = (h.quizPool || []).length;
+  var score = h.quizScore || 0;
+  var pct = Math.round((score / Math.max(total, 1)) * 100);
+  var grade = getGrade(pct);
+  var gradeClass = grade === 'S' ? 's' : grade === 'A' ? 'a' : grade === 'B' ? 'b' : 'c';
+  G.modesCompleted.add('hseep_quiz');
+  Tracker.endMode(score);
+  checkAchievements();
+  if (pct === 100 && total > 0) G.perfectModes++;
+  if (grade === 'S' || grade === 'A') confetti();
+  var catInfo = hseepCategoryInfo(h.quizCat || 'all');
+
+  app.innerHTML = `
+    <div class="screen results-screen">
+      ${charBubble('mentor', grade === 'S' || grade === 'A' ? 'Outstanding HSEEP knowledge! You are ready to design real exercises!' : 'Good effort! Review the explanations and try again to master HSEEP.', { success: grade === 'S' || grade === 'A' })}
+      <div class="result-big anim-in">📋</div>
+      <div class="result-sub">HSEEP Quiz Complete — ${catInfo.label}</div>
+      <div class="result-grade ${gradeClass} anim-in">Grade: ${grade}</div>
+      <div class="result-stats anim-in">
+        <div class="r-stat"><div class="val">${score}/${total}</div><div class="lbl">Correct</div></div>
+        <div class="r-stat"><div class="val">${pct}%</div><div class="lbl">Accuracy</div></div>
+        <div class="r-stat"><div class="val">${h.quizMaxStreak || 0}</div><div class="lbl">Max Streak</div></div>
+      </div>
+      <div class="result-actions anim-in" id="hseepQzResultBtns"></div>
+    </div>`;
+
+  var btns = document.getElementById('hseepQzResultBtns');
+  var retryBtn = document.createElement('button');
+  retryBtn.className = 'btn-primary';
+  retryBtn.textContent = '🔄 Retry Same Category';
+  retryBtn.addEventListener('click', function() {
+    h.quizCat = null; h.quizPool = null; h.quizIdx = 0;
+    h.quizScore = 0; h.quizAnswered = false;
+    G.screen = 'hseepQuiz'; render();
+  });
+  var menuBtn = document.createElement('button');
+  menuBtn.className = 'btn-outline';
+  menuBtn.textContent = '📋 HSEEP Menu';
+  menuBtn.addEventListener('click', function() {
+    h.quizCat = null; G.screen = 'hseepMenu'; render();
+  });
+  var modesBtn = document.createElement('button');
+  modesBtn.className = 'btn-outline';
+  modesBtn.textContent = '🏠 Mission Select';
+  modesBtn.addEventListener('click', function() { G.screen = 'modes'; render(); });
+  btns.appendChild(retryBtn);
+  btns.appendChild(menuBtn);
+  btns.appendChild(modesBtn);
+}
+
+// ============================================
+// HSEEP SCENARIO (Exercise Design Workshop)
+// ============================================
+function renderHSEEPScenario() {
+  var app = $('app');
+  var scenarios = window.HSEEP_SCENARIOS;
+  if (!scenarios || scenarios.length === 0) {
+    app.innerHTML = '<div class="screen"><div style="padding:20px;text-align:center">HSEEP scenarios not loaded.</div></div>';
+    return;
+  }
+
+  var h = G.hseep || {};
+  G.hseep = h;
+
+  // Phase: scenario list
+  if (h.scenIdx === undefined || h.scenIdx === null) {
+    var html = '<div class="screen"><div style="padding:16px">';
+    html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">';
+    html += '<button id="hseepScBack" style="padding:8px 14px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:var(--text-muted);border-radius:8px;cursor:pointer;font-size:0.85rem">← Back</button>';
+    html += '<h2 style="font-size:1.05rem;font-weight:700;flex:1">Exercise Design Workshop</h2></div>';
+    html += '<div style="display:flex;flex-direction:column;gap:10px">';
+    scenarios.forEach(function(sc, i) {
+      var done = (h.scenCompleted || {})[i];
+      html += '<button class="hseep-sc-item" data-sci="' + i + '" style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;cursor:pointer;width:100%;text-align:left">';
+      html += '<div style="font-size:1.6rem;flex-shrink:0">' + (done ? '✅' : '🏗️') + '</div>';
+      html += '<div><div style="font-weight:700;font-size:0.9rem;color:#66bb6a">' + sc.title + '</div>';
+      html += '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:2px">' + sc.exerciseType + ' · ' + (sc.estimatedTime || '') + ' · ' + (sc.steps || []).length + ' steps</div>';
+      html += '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px">' + (sc.description || '').substring(0, 80) + '...</div>';
+      html += '</div></button>';
+    });
+    html += '</div></div></div>';
+    app.innerHTML = html;
+
+    document.getElementById('hseepScBack').addEventListener('click', function() {
+      G.screen = 'hseepMenu'; render();
+    });
+    document.querySelectorAll('.hseep-sc-item').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var idx = parseInt(btn.getAttribute('data-sci'));
+        h.scenIdx = idx;
+        h.scenStepIdx = 0;
+        h.scenScore = 0;
+        h.scenAnswered = false;
+        h.scenSelected = undefined;
+        h.scenBuilt = [];
+        Tracker.startMode('hseep_scenario');
+        render();
+      });
+    });
+    return;
+  }
+
+  // Phase: step-by-step scenario
+  var sc = scenarios[h.scenIdx];
+  var steps = sc.steps || [];
+
+  if (h.scenStepIdx >= steps.length) {
+    // Scenario complete
+    renderHSEEPScenarioResult(sc);
+    return;
+  }
+
+  var step = steps[h.scenStepIdx];
+  var stepNum = h.scenStepIdx + 1;
+  var totalSteps = steps.length;
+  var pct = Math.round(((stepNum - 1) / totalSteps) * 100);
+
+  app.innerHTML = `
+    <div class="screen quiz-game">
+      <div style="padding:12px 16px 0">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <button id="hseepScAbort" style="padding:6px 12px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:8px;cursor:pointer;font-size:0.8rem">✕ Quit</button>
+          <div style="flex:1;background:rgba(255,255,255,0.08);border-radius:6px;height:6px;overflow:hidden">
+            <div style="height:100%;background:linear-gradient(90deg,#66bb6a,#26a69a);width:${pct}%;transition:width 0.3s"></div>
+          </div>
+          <div style="font-size:0.8rem;color:var(--text-muted)">Step ${stepNum}/${totalSteps}</div>
+        </div>
+        <div style="font-size:0.8rem;color:#66bb6a;font-weight:600;margin-bottom:4px">🏗️ ${sc.title}</div>
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:8px">${step.phase || ''}</div>
+      </div>
+      <div class="quiz-q-card anim-in" style="margin:0 12px">
+        <div class="quiz-q-text" style="font-size:0.93rem;margin-bottom:14px">${step.prompt || ''}</div>
+        <div class="quiz-opts">
+          ${(step.options || []).map(function(opt, i) {
+            var letter = String.fromCharCode(65 + i);
+            var cls = '';
+            if (h.scenAnswered) {
+              if (i === step.correct) cls = 'correct';
+              else if (i === h.scenSelected && i !== step.correct) cls = 'wrong';
+            }
+            return '<button class="q-opt ' + cls + ' hseep-sc-opt" data-sci="' + i + '" ' + (h.scenAnswered ? 'disabled' : '') + '><span class="q-letter">' + letter + '</span><span class="q-opt-text">' + opt + '</span></button>';
+          }).join('')}
+        </div>
+        ${h.scenAnswered ? `
+          <div class="quiz-explanation" style="margin-top:12px">
+            <strong>${h.scenSelected === step.correct ? '✅ Good decision!' : '❌ Reconsidering...'}</strong><br>
+            ${step.feedback || ''}
+          </div>
+          ${step.templateOutput ? `<div style="background:rgba(68,138,255,0.07);border:1px solid rgba(68,138,255,0.2);border-radius:8px;padding:10px;margin-top:10px;font-family:monospace;font-size:0.72rem;color:#b0b8d0;white-space:pre-wrap;line-height:1.5">${step.templateOutput}</div>` : ''}
+          <button id="hseepScNext" class="quiz-next-btn" style="margin-top:10px">${h.scenStepIdx + 1 >= steps.length ? 'View Results →' : 'Next Step →'}</button>
+        ` : ''}
+      </div>
+    </div>`;
+
+  document.getElementById('hseepScAbort').addEventListener('click', function() {
+    h.scenIdx = null; G.screen = 'hseepScenario'; render();
+  });
+
+  if (!h.scenAnswered) {
+    document.querySelectorAll('.hseep-sc-opt').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        if (h.scenAnswered) return;
+        var chosen = parseInt(btn.getAttribute('data-sci'));
+        h.scenAnswered = true;
+        h.scenSelected = chosen;
+        if (chosen === step.correct) {
+          h.scenScore++;
+          addScore(60);
+          addXP(25);
+          sfx('correct');
+        } else {
+          sfx('wrong');
+        }
+        if (step.templateOutput) h.scenBuilt.push(step.templateOutput);
+        render();
+      });
+    });
+  } else {
+    var nextBtn = document.getElementById('hseepScNext');
+    if (nextBtn) nextBtn.addEventListener('click', function() {
+      h.scenStepIdx++;
+      h.scenAnswered = false;
+      h.scenSelected = undefined;
+      render();
+    });
+  }
+}
+
+function renderHSEEPScenarioResult(sc) {
+  var app = $('app');
+  var h = G.hseep || {};
+  var steps = (sc || {}).steps || [];
+  var total = steps.length;
+  var score = h.scenScore || 0;
+  var pct = Math.round((score / Math.max(total, 1)) * 100);
+  var grade = getGrade(pct);
+  var gradeClass = grade === 'S' ? 's' : grade === 'A' ? 'a' : grade === 'B' ? 'b' : 'c';
+  G.modesCompleted.add('hseep_scenario');
+  Tracker.endMode(score);
+  checkAchievements();
+  if (pct === 100 && total > 0) G.perfectModes++;
+  if (grade === 'S' || grade === 'A') confetti();
+  h.scenCompleted = h.scenCompleted || {};
+  h.scenCompleted[h.scenIdx] = true;
+
+  app.innerHTML = `
+    <div class="screen results-screen">
+      ${charBubble('mentor', grade === 'S' || grade === 'A' ? 'Excellent exercise design decisions! You built a solid exercise framework.' : 'Good practice! Review the template outputs and refine your design skills.', { success: grade === 'S' || grade === 'A' })}
+      <div class="result-big anim-in">🏗️</div>
+      <div class="result-sub">Scenario Complete: ${(sc || {}).title || ''}</div>
+      <div class="result-grade ${gradeClass} anim-in">Grade: ${grade}</div>
+      <div class="result-stats anim-in">
+        <div class="r-stat"><div class="val">${score}/${total}</div><div class="lbl">Correct Decisions</div></div>
+        <div class="r-stat"><div class="val">${pct}%</div><div class="lbl">Accuracy</div></div>
+        <div class="r-stat"><div class="val">${(h.scenBuilt || []).length}</div><div class="lbl">Template Sections</div></div>
+      </div>
+      <div class="result-actions anim-in" id="hseepScResultBtns"></div>
+    </div>`;
+
+  var btns = document.getElementById('hseepScResultBtns');
+  var listBtn = document.createElement('button');
+  listBtn.className = 'btn-primary';
+  listBtn.textContent = '📋 Choose Another Scenario';
+  listBtn.addEventListener('click', function() {
+    h.scenIdx = null; h.scenStepIdx = 0;
+    G.screen = 'hseepScenario'; render();
+  });
+  var menuBtn = document.createElement('button');
+  menuBtn.className = 'btn-outline';
+  menuBtn.textContent = '📋 HSEEP Menu';
+  menuBtn.addEventListener('click', function() { G.screen = 'hseepMenu'; render(); });
+  var modesBtn = document.createElement('button');
+  modesBtn.className = 'btn-outline';
+  modesBtn.textContent = '🏠 Mission Select';
+  modesBtn.addEventListener('click', function() { G.screen = 'modes'; render(); });
+  btns.appendChild(listBtn);
+  btns.appendChild(menuBtn);
+  btns.appendChild(modesBtn);
+}
+
+// ============================================
+// HSEEP TEMPLATE BUILDER
+// ============================================
+function renderHSEEPTemplate() {
+  var app = $('app');
+  var templates = window.HSEEP_TEMPLATES;
+  if (!templates) {
+    app.innerHTML = '<div class="screen"><div style="padding:20px;text-align:center">HSEEP templates not loaded.</div></div>';
+    return;
+  }
+
+  var h = G.hseep || {};
+  G.hseep = h;
+
+  var TEMPLATE_KEYS = ['sitman', 'explan', 'msel', 'eeg', 'aar_ip'];
+  var TEMPLATE_LABELS = {
+    sitman: { icon: '📓', label: 'Situation Manual (SitMan)', color: '#448aff' },
+    explan: { icon: '📑', label: 'Exercise Plan (ExPlan)', color: '#66bb6a' },
+    msel: { icon: '📋', label: 'Master Scenario Events List (MSEL)', color: '#ff9800' },
+    eeg: { icon: '📊', label: 'Exercise Evaluation Guide (EEG)', color: '#ab47bc' },
+    aar_ip: { icon: '📈', label: 'After-Action Report (AAR/IP)', color: '#26a69a' }
+  };
+
+  // Phase: template list
+  if (!h.templateKey) {
+    var html = '<div class="screen"><div style="padding:16px">';
+    html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">';
+    html += '<button id="hseepTplBack" style="padding:8px 14px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:var(--text-muted);border-radius:8px;cursor:pointer;font-size:0.85rem">← Back</button>';
+    html += '<h2 style="font-size:1.05rem;font-weight:700;flex:1">HSEEP Template Builder</h2></div>';
+    html += '<div style="display:flex;flex-direction:column;gap:10px">';
+    TEMPLATE_KEYS.forEach(function(key) {
+      var tpl = templates[key];
+      if (!tpl) return;
+      var info = TEMPLATE_LABELS[key] || { icon: '📄', label: key, color: '#8b8fa3' };
+      html += '<button class="hseep-tpl-item" data-tpl="' + key + '" style="display:flex;align-items:flex-start;gap:12px;padding:14px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;cursor:pointer;width:100%;text-align:left">';
+      html += '<div style="font-size:1.6rem;flex-shrink:0">' + info.icon + '</div>';
+      html += '<div><div style="font-weight:700;font-size:0.9rem;color:' + info.color + '">' + info.label + '</div>';
+      html += '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:3px">' + (tpl.description || '').substring(0, 90) + '...</div>';
+      html += '<div style="font-size:0.73rem;color:var(--text-muted);margin-top:4px">Used for: ' + (Array.isArray(tpl.usedFor) ? tpl.usedFor.join(', ') : '') + '</div>';
+      html += '</div></button>';
+    });
+    html += '</div></div></div>';
+    app.innerHTML = html;
+
+    document.getElementById('hseepTplBack').addEventListener('click', function() {
+      G.screen = 'hseepMenu'; render();
+    });
+    document.querySelectorAll('.hseep-tpl-item').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        h.templateKey = btn.getAttribute('data-tpl');
+        h.templateSectionIdx = 0;
+        Tracker.startMode('hseep_template');
+        render();
+      });
+    });
+    return;
+  }
+
+  // Phase: section-by-section
+  var tpl = templates[h.templateKey];
+  if (!tpl) { h.templateKey = null; render(); return; }
+  var sections = tpl.sections || [];
+  var info = TEMPLATE_LABELS[h.templateKey] || { icon: '📄', label: h.templateKey, color: '#8b8fa3' };
+
+  if (h.templateSectionIdx >= sections.length) {
+    // Template complete
+    renderHSEEPTemplateResult(tpl, info);
+    return;
+  }
+
+  var section = sections[h.templateSectionIdx];
+  var secNum = h.templateSectionIdx + 1;
+  var totalSec = sections.length;
+  var pct = Math.round(((secNum - 1) / totalSec) * 100);
+
+  // Build section content HTML
+  var secContentHtml = '';
+  if (section.fields && Array.isArray(section.fields)) {
+    section.fields.forEach(function(f) {
+      if (typeof f === 'string') {
+        secContentHtml += '<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:0.82rem;color:var(--text-muted)">' + f + '</div>';
+      } else {
+        secContentHtml += '<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06)">';
+        secContentHtml += '<div style="font-size:0.8rem;font-weight:600;color:#b0b8d0">' + (f.field || '') + '</div>';
+        if (f.example) secContentHtml += '<div style="font-size:0.78rem;color:#66bb6a;margin-top:2px">Example: ' + f.example + '</div>';
+        if (f.tip) secContentHtml += '<div style="font-size:0.75rem;color:var(--text-muted);font-style:italic;margin-top:2px">Tip: ' + f.tip + '</div>';
+        secContentHtml += '</div>';
+      }
+    });
+  } else if (section.subsections) {
+    section.subsections.forEach(function(sub) {
+      secContentHtml += '<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06)">';
+      secContentHtml += '<div style="font-size:0.82rem;font-weight:600;color:#b0b8d0">' + (sub.title || '') + '</div>';
+      secContentHtml += '<div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">' + (sub.content || '') + '</div>';
+      secContentHtml += '</div>';
+    });
+  } else if (section.structure) {
+    var st = section.structure;
+    if (st.scenarioNarrative) secContentHtml += '<div style="font-size:0.8rem;color:var(--text-muted);padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.06)"><strong>Scenario Narrative:</strong> ' + st.scenarioNarrative + '</div>';
+    if (st.keyIssues) secContentHtml += '<div style="font-size:0.8rem;color:var(--text-muted);padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.06)"><strong>Key Issues:</strong> ' + st.keyIssues + '</div>';
+    if (st.discussionQuestions) secContentHtml += '<div style="font-size:0.8rem;color:var(--text-muted);padding:6px 0"><strong>Discussion Questions:</strong> ' + st.discussionQuestions + '</div>';
+  } else if (section.content) {
+    secContentHtml += '<div style="font-size:0.82rem;color:var(--text-muted);padding:6px 0">' + section.content + '</div>';
+  }
+  if (section.purpose) {
+    secContentHtml = '<div style="font-size:0.8rem;color:#448aff;margin-bottom:8px;font-style:italic">' + section.purpose + '</div>' + secContentHtml;
+  }
+  if (tpl.keyFact && secNum === 1) {
+    secContentHtml += '<div style="background:rgba(255,183,77,0.1);border:1px solid rgba(255,183,77,0.25);border-radius:8px;padding:10px;margin-top:10px;font-size:0.78rem;color:#ffb74d">💡 Key Fact: ' + tpl.keyFact + '</div>';
+  }
+
+  app.innerHTML = `
+    <div class="screen">
+      <div style="padding:12px 16px 0">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <button id="hseepTplAbort" style="padding:6px 12px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:8px;cursor:pointer;font-size:0.8rem">✕ Quit</button>
+          <div style="flex:1;background:rgba(255,255,255,0.08);border-radius:6px;height:6px;overflow:hidden">
+            <div style="height:100%;background:linear-gradient(90deg,${info.color},rgba(255,255,255,0.4));width:${pct}%;transition:width 0.3s"></div>
+          </div>
+          <div style="font-size:0.8rem;color:var(--text-muted)">Section ${secNum}/${totalSec}</div>
+        </div>
+        <div style="font-size:0.85rem;color:${info.color};font-weight:700;margin-bottom:4px">${info.icon} ${info.label}</div>
+      </div>
+      <div style="margin:0 12px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px">
+        <div style="font-size:1rem;font-weight:700;margin-bottom:10px">Section ${section.sectionNumber || secNum}: ${section.title || ''}</div>
+        <div id="hseepTplContent">${secContentHtml}</div>
+        <button id="hseepTplNext" class="quiz-next-btn" style="margin-top:14px;width:100%">${secNum >= totalSec ? 'Complete Template ✓' : 'Next Section →'}</button>
+      </div>
+    </div>`;
+
+  document.getElementById('hseepTplAbort').addEventListener('click', function() {
+    h.templateKey = null; G.screen = 'hseepTemplate'; render();
+  });
+  document.getElementById('hseepTplNext').addEventListener('click', function() {
+    h.templateSectionIdx++;
+    addScore(30);
+    addXP(15);
+    render();
+  });
+}
+
+function renderHSEEPTemplateResult(tpl, info) {
+  var app = $('app');
+  var h = G.hseep || {};
+  G.modesCompleted.add('hseep_template');
+  Tracker.endMode(1);
+  checkAchievements();
+  confetti();
+
+  app.innerHTML = `
+    <div class="screen results-screen">
+      ${charBubble('mentor', 'You have mastered the ' + ((tpl || {}).abbreviation || '') + ' template structure. Now apply it to a real exercise!', { success: true })}
+      <div class="result-big anim-in">${(info || {}).icon || '📄'}</div>
+      <div class="result-sub">${(info || {}).label || 'Template'} — Complete</div>
+      ${tpl && tpl.commonMistakes ? `<div style="background:rgba(255,50,50,0.07);border:1px solid rgba(255,50,50,0.2);border-radius:12px;padding:14px;margin:12px 0;text-align:left">
+        <div style="font-size:0.85rem;font-weight:700;margin-bottom:8px;color:#ff5252">⚠️ Common Mistakes to Avoid</div>
+        ${tpl.commonMistakes.map(function(m) { return '<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:5px">• ' + m + '</div>'; }).join('')}
+      </div>` : ''}
+      <div class="result-actions anim-in" id="hseepTplResultBtns"></div>
+    </div>`;
+
+  var btns = document.getElementById('hseepTplResultBtns');
+  var listBtn = document.createElement('button');
+  listBtn.className = 'btn-primary';
+  listBtn.textContent = '📄 Choose Another Template';
+  listBtn.addEventListener('click', function() {
+    h.templateKey = null; h.templateSectionIdx = 0;
+    G.screen = 'hseepTemplate'; render();
+  });
+  var menuBtn = document.createElement('button');
+  menuBtn.className = 'btn-outline';
+  menuBtn.textContent = '📋 HSEEP Menu';
+  menuBtn.addEventListener('click', function() { G.screen = 'hseepMenu'; render(); });
+  var modesBtn = document.createElement('button');
+  modesBtn.className = 'btn-outline';
+  modesBtn.textContent = '🏠 Mission Select';
+  modesBtn.addEventListener('click', function() { G.screen = 'modes'; render(); });
+  btns.appendChild(listBtn);
+  btns.appendChild(menuBtn);
+  btns.appendChild(modesBtn);
+}
+
+// ============================================
+// HSEEP CAMPAIGN MAP
+// ============================================
+function renderHSEEPCampaignMap() {
+  var app = $('app');
+  var campaign = window.HSEEP_CAMPAIGN;
+  if (!campaign) {
+    app.innerHTML = '<div class="screen"><div style="padding:20px;text-align:center">HSEEP campaign not loaded.</div></div>';
+    return;
+  }
+
+  var h = G.hseep || {};
+  G.hseep = h;
+  h.campaignProgress = h.campaignProgress || {};
+
+  var chapters = campaign.chapters || [];
+  var milestones = campaign.milestones || [];
+  var totalXP = h.campaignXP || 0;
+
+  // Find current milestone
+  var milestone = milestones[0] || {};
+  for (var mi = milestones.length - 1; mi >= 0; mi--) {
+    if (totalXP >= (milestones[mi].minScore || 0)) { milestone = milestones[mi]; break; }
+  }
+
+  var chapterHtml = chapters.map(function(ch, i) {
+    var chNum = i + 1;
+    var done = h.campaignProgress[chNum] && h.campaignProgress[chNum].completed;
+    var locked = chNum > 1 && !h.campaignProgress[chNum - 1];
+    var diffColor = ch.difficulty === 'expert' ? '#f44336' : ch.difficulty === 'hard' ? '#ff9800' : ch.difficulty === 'normal' ? '#448aff' : '#66bb6a';
+    return '<button class="hseep-camp-ch" data-chnum="' + chNum + '" ' + (locked ? 'disabled' : '') + ' style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:' + (done ? 'rgba(102,187,106,0.08)' : locked ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.04)') + ';border:1px solid ' + (done ? 'rgba(102,187,106,0.3)' : locked ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.1)') + ';border-radius:12px;cursor:' + (locked ? 'not-allowed' : 'pointer') + ';width:100%;text-align:left;opacity:' + (locked ? '0.45' : '1') + '">' +
+      '<div style="font-size:1.4rem;flex-shrink:0">' + (done ? '✅' : locked ? '🔒' : '⚔️') + '</div>' +
+      '<div style="flex:1">' +
+        '<div style="font-size:0.82rem;font-weight:700">Ch.' + chNum + ': ' + ch.title + '</div>' +
+        '<div style="font-size:0.72rem;color:var(--text-muted);margin-top:1px">' + (ch.subtitle || '') + '</div>' +
+      '</div>' +
+      '<div style="text-align:right;flex-shrink:0">' +
+        '<div style="font-size:0.7rem;color:' + diffColor + ';font-weight:600">' + (ch.difficulty || 'normal').toUpperCase() + '</div>' +
+        '<div style="font-size:0.68rem;color:var(--text-muted)">' + (ch.xpGoal || 0) + ' XP</div>' +
+      '</div>' +
+    '</button>';
+  }).join('');
+
+  app.innerHTML = `
+    <div class="screen">
+      <div style="padding:16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <button id="hseepCampBack" style="padding:8px 14px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:var(--text-muted);border-radius:8px;cursor:pointer;font-size:0.85rem">← Back</button>
+          <div style="flex:1">
+            <h2 style="font-size:1rem;font-weight:700;margin:0">${campaign.title || 'HSEEP Campaign'}</h2>
+            <div style="font-size:0.72rem;color:var(--text-muted)">${campaign.subtitle || ''}</div>
+          </div>
+        </div>
+        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:12px;margin-bottom:14px;display:flex;align-items:center;gap:12px">
+          <div style="font-size:1.8rem">${milestone.rank === 'HSEEP Master' ? '🏆' : '🎖️'}</div>
+          <div>
+            <div style="font-size:0.85rem;font-weight:700;color:${milestone.color || '#ffd700'}">${milestone.rank || 'Recruit'}</div>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:1px">${totalXP} XP earned · ${milestone.desc || ''}</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">${chapterHtml}</div>
+      </div>
+    </div>`;
+
+  document.getElementById('hseepCampBack').addEventListener('click', function() {
+    G.screen = 'hseepMenu'; render();
+  });
+  document.querySelectorAll('.hseep-camp-ch').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      if (btn.disabled) return;
+      var chNum = parseInt(btn.getAttribute('data-chnum'));
+      h.campaignChapter = chNum;
+      h.campaignPhase = 'cinematic';
+      h.campaignQIdx = 0;
+      h.campaignQScore = 0;
+      h.campaignAnswered = false;
+      h.campaignSelected = undefined;
+      G.screen = 'hseepCampaignChapter';
+      render();
+    });
+  });
+}
+
+// ============================================
+// HSEEP CAMPAIGN CHAPTER
+// ============================================
+function renderHSEEPCampaignChapter() {
+  var app = $('app');
+  var campaign = window.HSEEP_CAMPAIGN;
+  if (!campaign) { G.screen = 'hseepCampaign'; render(); return; }
+
+  var h = G.hseep || {};
+  G.hseep = h;
+  var chapters = campaign.chapters || [];
+  var chIdx = (h.campaignChapter || 1) - 1;
+  var ch = chapters[chIdx];
+  if (!ch) { G.screen = 'hseepCampaign'; render(); return; }
+
+  var phase = h.campaignPhase || 'cinematic';
+
+  // --- CINEMATIC ---
+  if (phase === 'cinematic') {
+    var cin = ch.cinematic || {};
+    app.innerHTML = `
+      <div class="screen">
+        <div style="padding:16px">
+          <div style="background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:16px;margin-bottom:16px">
+            <div style="font-size:0.72rem;color:var(--text-muted);letter-spacing:0.1em;margin-bottom:8px">CHAPTER ${ch.id} — ${ch.subtitle || ''}</div>
+            <div style="font-size:1rem;font-weight:700;margin-bottom:12px">${ch.title}</div>
+            <div style="font-size:0.82rem;color:#c8cad8;line-height:1.8;white-space:pre-line">${cin.text || ''}</div>
+            ${cin.atmosphere ? '<div style="margin-top:12px;font-size:0.75rem;color:var(--text-muted);font-style:italic">🎬 ' + cin.atmosphere + '</div>' : ''}
+          </div>
+          <button id="hseepCinNext" style="display:block;width:100%;padding:14px;background:linear-gradient(135deg,rgba(68,138,255,0.2),rgba(124,77,255,0.15));border:1px solid rgba(68,138,255,0.4);color:#fff;font-weight:700;border-radius:12px;cursor:pointer;font-size:0.95rem">Read Briefing →</button>
+          <button id="hseepCinBack" style="display:block;width:100%;padding:10px;margin-top:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--text-muted);border-radius:12px;cursor:pointer;font-size:0.85rem">← Chapter Map</button>
+        </div>
+      </div>`;
+    document.getElementById('hseepCinNext').addEventListener('click', function() {
+      h.campaignPhase = 'briefing'; render();
+    });
+    document.getElementById('hseepCinBack').addEventListener('click', function() {
+      G.screen = 'hseepCampaign'; render();
+    });
+    return;
+  }
+
+  // --- BRIEFING ---
+  if (phase === 'briefing') {
+    // Load questions for this chapter
+    var qIds = ch.questions || [];
+    h.campaignQPool = qIds.map(function(id) { return hseepGetQuestionById(id); }).filter(Boolean);
+    // Shuffle pool
+    var pool = h.campaignQPool;
+    for (var pi = pool.length - 1; pi > 0; pi--) {
+      var pj = Math.floor(Math.random() * (pi + 1));
+      var tmp = pool[pi]; pool[pi] = pool[pj]; pool[pj] = tmp;
+    }
+    h.campaignQIdx = 0;
+    h.campaignQScore = 0;
+    h.campaignPlayerHP = 100;
+
+    app.innerHTML = `
+      <div class="screen">
+        <div style="padding:16px">
+          <div style="background:rgba(68,138,255,0.07);border:1px solid rgba(68,138,255,0.2);border-radius:16px;padding:16px;margin-bottom:14px">
+            <div style="font-size:0.72rem;color:var(--text-muted);letter-spacing:0.1em;margin-bottom:6px">MISSION BRIEFING — CH.${ch.id}</div>
+            <div style="font-size:1rem;font-weight:700;margin-bottom:10px">${ch.title}</div>
+            <div style="font-size:0.82rem;color:#c8cad8;line-height:1.7">${ch.briefing || ''}</div>
+            <div style="margin-top:12px">
+              <div style="font-size:0.78rem;font-weight:600;margin-bottom:6px;color:#448aff">Chapter Objectives:</div>
+              ${(ch.objectives || []).map(function(obj) { return '<div style="font-size:0.76rem;color:var(--text-muted);margin-bottom:4px">• ' + obj + '</div>'; }).join('')}
+            </div>
+          </div>
+          <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;font-size:0.8rem">
+              <div><span style="color:var(--text-muted)">Questions:</span> <strong>${pool.length}</strong></div>
+              <div><span style="color:var(--text-muted)">XP Goal:</span> <strong>${ch.xpGoal || 0}</strong></div>
+              <div><span style="color:var(--text-muted)">Difficulty:</span> <strong style="text-transform:capitalize">${ch.difficulty || 'normal'}</strong></div>
+            </div>
+          </div>
+          <button id="hseepBriefStart" style="display:block;width:100%;padding:14px;background:linear-gradient(135deg,rgba(68,138,255,0.25),rgba(124,77,255,0.2));border:1px solid rgba(68,138,255,0.5);color:#fff;font-weight:700;border-radius:12px;cursor:pointer;font-size:1rem">⚔️ Start Chapter</button>
+          <button id="hseepBriefBack" style="display:block;width:100%;padding:10px;margin-top:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--text-muted);border-radius:12px;cursor:pointer;font-size:0.85rem">← Back to Cinematic</button>
+        </div>
+      </div>`;
+    document.getElementById('hseepBriefStart').addEventListener('click', function() {
+      h.campaignPhase = 'questions'; render();
+    });
+    document.getElementById('hseepBriefBack').addEventListener('click', function() {
+      h.campaignPhase = 'cinematic'; render();
+    });
+    return;
+  }
+
+  // --- QUESTIONS ---
+  if (phase === 'questions') {
+    var qpool = h.campaignQPool || [];
+    var qIdx = h.campaignQIdx || 0;
+
+    if (qIdx >= qpool.length) {
+      // Go to boss
+      h.campaignPhase = 'boss';
+      h.campaignBossAnswered = false;
+      h.campaignBossSelected = undefined;
+      render();
+      return;
+    }
+
+    var q = qpool[qIdx];
+    var total = qpool.length;
+    var pct = Math.round((qIdx / total) * 100);
+    var catInfo = hseepCategoryInfo(q.category || '');
+
+    app.innerHTML = `
+      <div class="screen quiz-game">
+        <div style="padding:12px 16px 0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <div style="font-size:0.78rem;font-weight:700;color:#448aff">⚔️ Ch.${ch.id}: ${ch.title}</div>
+            <div style="flex:1;background:rgba(255,255,255,0.08);border-radius:6px;height:5px;overflow:hidden;margin-left:8px">
+              <div style="height:100%;background:linear-gradient(90deg,#448aff,#7c4dff);width:${pct}%;transition:width 0.3s"></div>
+            </div>
+            <div style="font-size:0.78rem;color:var(--text-muted)">${qIdx + 1}/${total}</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:0.75rem">
+            <span style="color:var(--text-muted)">${catInfo.icon} ${catInfo.label}</span>
+            <span style="color:#66bb6a">Score: ${h.campaignQScore || 0}</span>
+          </div>
+        </div>
+        <div class="quiz-q-card anim-in" style="margin:0 12px">
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:6px">Difficulty: ${(q.diff || 'normal').toUpperCase()}</div>
+          <div class="quiz-q-text" style="font-size:0.92rem;margin-bottom:14px">${q.q}</div>
+          <div class="quiz-opts">
+            ${(q.o || []).map(function(opt, i) {
+              var letter = String.fromCharCode(65 + i);
+              var cls = '';
+              if (h.campaignAnswered) {
+                if (i === q.a) cls = 'correct';
+                else if (i === h.campaignSelected && i !== q.a) cls = 'wrong';
+              }
+              return '<button class="q-opt ' + cls + ' hseep-camp-opt" data-qi="' + i + '" ' + (h.campaignAnswered ? 'disabled' : '') + '><span class="q-letter">' + letter + '</span><span class="q-opt-text">' + opt + '</span></button>';
+            }).join('')}
+          </div>
+          ${h.campaignAnswered ? `
+            <div class="quiz-explanation" style="margin-top:12px">
+              <strong>${h.campaignSelected === q.a ? '✅ Correct!' : '❌ Incorrect'}</strong><br>${q.exp || ''}
+            </div>
+            <button id="hseepCampQNext" class="quiz-next-btn" style="margin-top:10px">
+              ${qIdx + 1 >= total ? 'Boss Battle! 👹' : 'Next Question →'}
+            </button>
+          ` : ''}
+        </div>
+      </div>`;
+
+    if (!h.campaignAnswered) {
+      document.querySelectorAll('.hseep-camp-opt').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          if (h.campaignAnswered) return;
+          var chosen = parseInt(btn.getAttribute('data-qi'));
+          h.campaignAnswered = true;
+          h.campaignSelected = chosen;
+          if (chosen === q.a) {
+            h.campaignQScore = (h.campaignQScore || 0) + 1;
+            addScore(80);
+            addXP(30);
+            sfx('correct');
+          } else {
+            h.campaignPlayerHP = Math.max(0, (h.campaignPlayerHP || 100) - 15);
+            sfx('wrong');
+          }
+          render();
+        });
+      });
+    } else {
+      var nextBtn = document.getElementById('hseepCampQNext');
+      if (nextBtn) nextBtn.addEventListener('click', function() {
+        h.campaignQIdx++;
+        h.campaignAnswered = false;
+        h.campaignSelected = undefined;
+        render();
+      });
+    }
+    return;
+  }
+
+  // --- BOSS BATTLE ---
+  if (phase === 'boss') {
+    var boss = ch.boss || {};
+    var bossAnswered = h.campaignBossAnswered || false;
+    var bossSelected = h.campaignBossSelected;
+    var bossCorrect = bossSelected === boss.correct;
+
+    app.innerHTML = `
+      <div class="screen">
+        <div style="padding:16px">
+          ${charBubble('villain', 'Final challenge! Think carefully before answering...')}
+          <div style="background:linear-gradient(135deg,rgba(255,50,50,0.1),rgba(255,100,0,0.07));border:1px solid rgba(255,50,50,0.3);border-radius:16px;padding:14px;margin-bottom:14px">
+            <div style="font-size:0.72rem;color:#ff5252;font-weight:700;letter-spacing:0.08em;margin-bottom:6px">👹 BOSS BATTLE: ${boss.title || ''}</div>
+            <div style="font-size:0.88rem;color:#c8cad8;line-height:1.7">${boss.scenario || ''}</div>
+          </div>
+          <div class="quiz-opts">
+            ${(boss.options || []).map(function(opt, i) {
+              var letter = String.fromCharCode(65 + i);
+              var cls = '';
+              if (bossAnswered) {
+                if (i === boss.correct) cls = 'correct';
+                else if (i === bossSelected && i !== boss.correct) cls = 'wrong';
+              }
+              return '<button class="q-opt ' + cls + ' hseep-boss-opt" data-bi="' + i + '" ' + (bossAnswered ? 'disabled' : '') + '><span class="q-letter">' + letter + '</span><span class="q-opt-text">' + opt + '</span></button>';
+            }).join('')}
+          </div>
+          ${bossAnswered ? `
+            <div class="quiz-explanation" style="margin-top:12px">
+              <strong>${bossCorrect ? '🏆 Boss Defeated!' : '💀 Boss Wins This Round'}</strong><br>${boss.feedback || ''}
+            </div>
+            <button id="hseepBossNext" class="quiz-next-btn" style="margin-top:12px;width:100%">View Chapter Results →</button>
+          ` : ''}
+        </div>
+      </div>`;
+
+    if (!bossAnswered) {
+      document.querySelectorAll('.hseep-boss-opt').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          if (h.campaignBossAnswered) return;
+          var chosen = parseInt(btn.getAttribute('data-bi'));
+          h.campaignBossAnswered = true;
+          h.campaignBossSelected = chosen;
+          h.campaignBossCorrect = chosen === boss.correct;
+          if (h.campaignBossCorrect) {
+            var xpReward = boss.xpReward || 200;
+            h.campaignXP = (h.campaignXP || 0) + xpReward;
+            addScore(500);
+            addXP(xpReward);
+            sfx('correct');
+            confetti();
+          } else {
+            sfx('wrong');
+          }
+          render();
+        });
+      });
+    } else {
+      var bossNext = document.getElementById('hseepBossNext');
+      if (bossNext) bossNext.addEventListener('click', function() {
+        G.screen = 'hseepCampaignResult';
+        render();
+      });
+    }
+    return;
+  }
+}
+
+// ============================================
+// HSEEP CAMPAIGN RESULT
+// ============================================
+function renderHSEEPCampaignResult() {
+  var app = $('app');
+  var campaign = window.HSEEP_CAMPAIGN;
+  var h = G.hseep || {};
+  G.hseep = h;
+
+  var chapters = (campaign || {}).chapters || [];
+  var chIdx = (h.campaignChapter || 1) - 1;
+  var ch = chapters[chIdx] || {};
+  var boss = ch.boss || {};
+
+  var qpool = h.campaignQPool || [];
+  var qScore = h.campaignQScore || 0;
+  var qTotal = qpool.length;
+  var bossCorrect = h.campaignBossCorrect || false;
+  var totalScore = qScore + (bossCorrect ? 1 : 0);
+  var totalPossible = qTotal + 1;
+  var pct = Math.round((totalScore / Math.max(totalPossible, 1)) * 100);
+  var grade = getGrade(pct);
+  var gradeClass = grade === 'S' ? 's' : grade === 'A' ? 'a' : grade === 'B' ? 'b' : 'c';
+  var xpEarned = h.campaignXP || 0;
+
+  // Mark chapter as completed
+  h.campaignProgress = h.campaignProgress || {};
+  if (grade === 'S' || grade === 'A' || bossCorrect || pct >= 60) {
+    h.campaignProgress[h.campaignChapter] = { completed: true, grade: grade, xp: xpEarned };
+    G.modesCompleted.add('hseep_campaign_ch' + h.campaignChapter);
+    Tracker.endMode(totalScore);
+    checkAchievements();
+    addXP(Math.round((ch.xpGoal || 500) * (pct / 100)));
+  }
+
+  var isFinalChapter = (h.campaignChapter || 1) >= chapters.length;
+  var allDone = isFinalChapter && (grade === 'S' || grade === 'A' || bossCorrect);
+  if (grade === 'S' || grade === 'A') confetti();
+
+  app.innerHTML = `
+    <div class="screen results-screen">
+      ${charBubble('mentor', bossCorrect ? 'Outstanding! Chapter complete!' : 'Good effort! Keep pushing toward mastery!', { success: bossCorrect })}
+      <div class="result-big anim-in">${bossCorrect ? '🏆' : '📋'}</div>
+      <div class="result-sub">Ch.${ch.id || h.campaignChapter}: ${ch.title || ''}</div>
+      <div class="result-grade ${gradeClass} anim-in">Grade: ${grade}</div>
+      <div class="result-stats anim-in">
+        <div class="r-stat"><div class="val">${qScore}/${qTotal}</div><div class="lbl">Questions</div></div>
+        <div class="r-stat"><div class="val">${bossCorrect ? 'WIN' : 'LOSS'}</div><div class="lbl">Boss Battle</div></div>
+        <div class="r-stat"><div class="val">${pct}%</div><div class="lbl">Overall</div></div>
+      </div>
+      ${(ch.rewards || []).length > 0 && bossCorrect ? '<div style="background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.25);border-radius:10px;padding:10px;margin:10px 0;font-size:0.8rem;color:#ffd700">🏅 ' + ch.rewards.join(' · ') + '</div>' : ''}
+      ${allDone && boss.isFinalBoss ? '<div style="background:linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,140,0,0.08));border:1px solid rgba(255,215,0,0.4);border-radius:12px;padding:14px;margin:10px 0;font-size:0.82rem;color:#ffd700;line-height:1.6">' + ((campaign || {}).chapters && campaign.chapters[9] && campaign.chapters[9].completionCinematic ? campaign.chapters[9].completionCinematic.text.substring(0, 300) + '...' : '') + '</div>' : ''}
+      <div class="result-actions anim-in" id="hseepCampResultBtns"></div>
+    </div>`;
+
+  var btns = document.getElementById('hseepCampResultBtns');
+
+  if (!isFinalChapter) {
+    var nextChBtn = document.createElement('button');
+    nextChBtn.className = 'btn-primary';
+    nextChBtn.textContent = '▶ Next Chapter';
+    nextChBtn.addEventListener('click', function() {
+      h.campaignChapter = (h.campaignChapter || 1) + 1;
+      h.campaignPhase = 'cinematic';
+      h.campaignQIdx = 0;
+      h.campaignQScore = 0;
+      h.campaignAnswered = false;
+      h.campaignBossAnswered = false;
+      G.screen = 'hseepCampaignChapter';
+      render();
+    });
+    btns.appendChild(nextChBtn);
+  }
+
+  var retryBtn = document.createElement('button');
+  retryBtn.className = isFinalChapter ? 'btn-primary' : 'btn-outline';
+  retryBtn.textContent = '🔄 Retry Chapter';
+  retryBtn.addEventListener('click', function() {
+    h.campaignPhase = 'cinematic';
+    h.campaignQIdx = 0;
+    h.campaignQScore = 0;
+    h.campaignAnswered = false;
+    h.campaignBossAnswered = false;
+    G.screen = 'hseepCampaignChapter';
+    render();
+  });
+  var mapBtn = document.createElement('button');
+  mapBtn.className = 'btn-outline';
+  mapBtn.textContent = '🗺️ Chapter Map';
+  mapBtn.addEventListener('click', function() {
+    G.screen = 'hseepCampaign'; render();
+  });
+  var menuBtn = document.createElement('button');
+  menuBtn.className = 'btn-outline';
+  menuBtn.textContent = '🏠 Mission Select';
+  menuBtn.addEventListener('click', function() { G.screen = 'modes'; render(); });
+  btns.appendChild(retryBtn);
+  btns.appendChild(mapBtn);
+  btns.appendChild(menuBtn);
+}
+
+// ============================================
+// END OF HSEEP GAME MODULE
 // ============================================
