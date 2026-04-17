@@ -365,16 +365,31 @@ tr:hover td{background:rgba(68,138,255,0.05)}
 </div>
 
 <script>
-const API = (() => {
+let API = (() => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('api')) {
+    const raw = decodeURIComponent(params.get('api'));
+    if (raw.startsWith('http')) return raw;
+    const loc = window.location.href;
+    const proxyMatch = loc.match(/^(https?:\/\/[^/]+\/sites\/proxy\/[^/]+)/);
+    if (proxyMatch) return proxyMatch[1] + '/' + raw;
+    return window.location.origin + '/' + raw;
+  }
   const p = '__PORT_8000__';
   if (!p.startsWith('__')) return p;
-  // Auto-detect proxy path from current URL (for deploy_website environments)
   const loc = window.location.href;
   const proxyMatch = loc.match(/^(https?:\/\/[^/]+\/sites\/proxy\/[^/]+)/);
   if (proxyMatch) return proxyMatch[1] + '/port/8000';
   if (loc.includes('github.io')) return 'https://disaster-med-backend-en.onrender.com';
   return 'http://localhost:8000';
 })();
+
+window.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'SET_API_URL') {
+    API = e.data.url;
+    console.log('Admin API URL set via postMessage:', API);
+  }
+});
 
 let adminToken = '';
 let currentTab = 'overview';
@@ -484,7 +499,12 @@ const MODE_NAMES = {
   campaign_biological: {icon: '🦠', name: 'Campaign: Biological Terror', color: 'var(--green)'},
   campaign_nuclear: {icon: '☢️', name: 'Campaign: Nuclear', color: 'var(--yellow)'},
   campaign_active_shooter: {icon: '🎯', name: 'Campaign: Active Shooter', color: 'var(--red)'},
-  campaign_multi_terror: {icon: '💀', name: 'Campaign: Multi-Terror', color: 'var(--red)'}
+  campaign_multi_terror: {icon: '💀', name: 'Campaign: Multi-Terror', color: 'var(--red)'},
+  hseep: {icon: '📋', name: 'HSEEP Exercise Design', color: 'var(--blue)'},
+  hseep_quiz: {icon: '📋', name: 'HSEEP Quiz', color: 'var(--blue)'},
+  hseep_scenario: {icon: '🏗️', name: 'HSEEP Exercise Workshop', color: 'var(--blue)'},
+  hseep_template: {icon: '📄', name: 'HSEEP Template Builder', color: 'var(--blue)'},
+  hseep_campaign: {icon: '⚔️', name: 'HSEEP Campaign', color: 'var(--blue)'}
 };
 
 // Helper: resolve mode name with campaign sub-mode support
