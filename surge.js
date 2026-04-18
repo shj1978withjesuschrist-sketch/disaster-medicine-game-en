@@ -1,5 +1,5 @@
 // ============================================
-// EMERGO TRAIN SYSTEM — Digital Implementation
+// SURGE TRAIN SYSTEM — Digital Implementation
 // Time-Based Patient Management + Continuous Chain + Resource Allocation
 // ============================================
 
@@ -33,8 +33,8 @@ const RESOURCE_TYPES = {
   firstAid:  { name: 'EMT', icon: '⛑️', color: '#ef4444' }
 };
 
-// ---- EMERGO Patient Bank (40 patients — Sieve/Sort data included) ----
-const EMERGO_PATIENTS = [
+// ---- SURGE Patient Bank (40 patients — Sieve/Sort data included) ----
+const SURGE_PATIENTS = [
   // === Scene Sieve: RED (Immediate) ===
   {
     id: 'E-001', name: 'Kim Tae-hyun', age: 38, gender: 'M', icon: '👨',
@@ -363,7 +363,7 @@ const EMERGO_PATIENTS = [
 ];
 
 // ---- Continuous Chain Scenarios ----
-const EMERGO_CHAIN_SCENARIOS = [
+const SURGE_CHAIN_SCENARIOS = [
   {
     id: 'chain-1',
     title: 'Urban Complex Explosion',

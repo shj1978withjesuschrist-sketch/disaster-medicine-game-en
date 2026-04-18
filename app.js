@@ -244,9 +244,9 @@ const ACHIEVEMENTS = [
   { id: 'skill_unlock', name: 'Skill Awakened', desc: 'Unlock your first skill', icon: '✨', category: 'explorer', check: g => g.unlockedSkills.length > 0 },
   { id: 'level_5', name: 'Skilled', desc: 'Reach Level 5', icon: '📈', category: 'explorer', check: g => g.level >= 5 },
   { id: 'level_10', name: 'Veteran', desc: 'Reach Level 10', icon: '🏆', category: 'explorer', check: g => g.level >= 10 },
-  // EMERGO
-  { id: 'emergo_clear', name: 'EMERGO Cleared', desc: 'Complete EMERGO chain scenario', icon: '🏥', category: 'mastery', check: g => g.modesCompleted.has('emergo') },
-  { id: 'zero_preventable', name: 'Zero Preventable Deaths', desc: 'Achieve 0 preventable deaths in EMERGO', icon: '🛡️', category: 'legend', check: g => g.emergoZeroPD === true },
+  // SURGE
+  { id: 'surge_clear', name: 'SURGE Cleared', desc: 'Complete SURGE chain scenario', icon: '🏥', category: 'mastery', check: g => g.modesCompleted.has('surge') },
+  { id: 'zero_preventable', name: 'Zero Preventable Deaths', desc: 'Achieve 0 preventable deaths in SURGE', icon: '🛡️', category: 'legend', check: g => g.surgeZeroPD === true },
   // Legend
   { id: 'all_achieve', name: 'Complete', desc: 'Earn all achievements', icon: '🎊', category: 'legend', check: g => g.earnedAchievements.length >= 16 },
 ];
@@ -405,11 +405,19 @@ const Tracker = {
     } catch(e) { this.enabled = false; }
     const deviceInfo2 = /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
     LocalStore.updateCurrentSession({ nickname, started_at: new Date().toISOString(), device: deviceInfo2, modes: [], answers: [] });
+    // Firebase real-time sync
+    if (window.FirebaseSync && FirebaseSync.isReady()) {
+      const sid = this.sessionId || ('LOCAL-' + Date.now());
+      FirebaseSync.pushSessionUpdate({ sessionId: sid, nickname, team: window.G ? G.team : '', total_score: 0, max_level: 1, max_streak: 0, modes_completed: [], current_mode: null, device: deviceInfo2, started_at: new Date().toISOString() });
+    }
   },
 
   async endSession(totalScore, maxLevel, maxStreak, modesCompleted) {
     if (!this.enabled || !this.sessionId) return;
     LocalStore.finishSession({ total_score: totalScore, max_level: maxLevel, max_streak: maxStreak, modes_completed: [...modesCompleted] });
+    if (window.FirebaseSync && FirebaseSync.isReady()) {
+      FirebaseSync.pushSessionUpdate({ sessionId: this.sessionId, nickname: G.nickname, team: G.team || '', total_score: totalScore, max_level: maxLevel, max_streak: maxStreak, modes_completed: [...modesCompleted], device: /Mobi|Android/i.test(navigator.userAgent)?'mobile':'desktop', started_at: LocalStore._currentSession?.started_at || '' });
+    }
     try {
       await fetch(`${TRACKING_API}/api/session/end`, {
         method: 'POST',
@@ -443,6 +451,10 @@ const Tracker = {
     this.modeTotal++;
     if (isCorrect) this.modeCorrect++;
     LocalStore.addAnswer({ mode: this.currentMode, question_id: String(questionId), selected: String(selectedAnswer), correct: isCorrect, time_sec: timeTaken, at: new Date().toISOString() });
+    if (window.FirebaseSync && FirebaseSync.isReady()) {
+      FirebaseSync.pushAnswer(this.sessionId, { mode: this.currentMode, question_id: String(questionId), selected: String(selectedAnswer), correct: isCorrect, time_sec: timeTaken });
+      FirebaseSync.pushSessionUpdate({ sessionId: this.sessionId, nickname: G.nickname, team: G.team||'', total_score: G.score, max_level: G.level, max_streak: G.maxStreak, modes_completed: [...G.modesCompleted], current_mode: this.currentMode, current_progress: {correct: this.modeCorrect, total: this.modeTotal}, device: /Mobi|Android/i.test(navigator.userAgent)?'mobile':'desktop', started_at: '' });
+    }
     try {
       await fetch(`${TRACKING_API}/api/question/response`, {
         method: 'POST',
@@ -464,6 +476,9 @@ const Tracker = {
     const timeSpent = Math.round((Date.now() - this.modeStartTime) / 1000);
     this.modeScore = score;
     LocalStore.addModeResult({ mode: this.currentMode, score, correct: this.modeCorrect, total: this.modeTotal, time_sec: timeSpent, at: new Date().toISOString() });
+    if (window.FirebaseSync && FirebaseSync.isReady()) {
+      FirebaseSync.pushModeResult(this.sessionId, { mode: this.currentMode, score, correct: this.modeCorrect, total: this.modeTotal, time_sec: timeSpent });
+    }
     try {
       await fetch(`${TRACKING_API}/api/mode/result`, {
         method: 'POST',
@@ -573,13 +588,16 @@ const G = {
   // Modes completed
   modesCompleted: new Set(),
 
-  // EMERGO
-  emergo: null,
-  emergoZeroPD: false
+  // SURGE
+  surge: null,
+  surgeZeroPD: false
 };
 
 const $ = id => document.getElementById(id);
 const app = $('app');
+
+// ---- FIREBASE INIT ----
+if (window.FirebaseSync) { FirebaseSync.init('en'); }
 
 // ---- AUDIO ----
 let audioCtx;
@@ -991,9 +1009,9 @@ function render() {
   else if (s === 'leadership') renderLeadership();
   else if (s === 'teamwork') renderTeamwork();
   else if (s === 'boss') renderBoss();
-  else if (s === 'emergoSelect') renderEmergoSelect();
-  else if (s === 'emergo') renderEmergoPhase();
-  else if (s === 'emergoResults') {} // already rendered
+  else if (s === 'surgeSelect') renderSurgeSelect();
+  else if (s === 'surge') renderSurgePhase();
+  else if (s === 'surgeResults') {} // already rendered
   else if (s === 'results') renderResults();
   else if (s === 'cbrneAdv') renderCBRNEAdv();
   else if (s === 'cbrneAdvScenario') renderCBRNEAdvScenario();
@@ -1027,6 +1045,14 @@ function renderIntro() {
       <div class="qr-section" id="qr-section"></div>
       <div class="nick-input-wrap">
         <input class="nick-input" id="nick" placeholder="Enter Nickname" maxlength="8" autocomplete="off"/>
+        <select class="nick-input" id="team-select" style="margin-top:8px;text-align:center;background:#161b2e;color:#aab;border:1px solid #2a3050;border-radius:12px;padding:12px 18px;font-size:1rem;width:100%;max-width:320px;">
+          <option value="">🏷️ Select Team (optional)</option>
+          <option value="Alpha">🔴 Team Alpha</option>
+          <option value="Bravo">🔵 Team Bravo</option>
+          <option value="Charlie">🟢 Team Charlie</option>
+          <option value="Delta">🟡 Team Delta</option>
+          <option value="Echo">🟣 Team Echo</option>
+        </select>
       </div>
       <button class="enter-btn" id="enter-btn" disabled>Ready to Deploy 🚑</button>
       <div class="badge-row">
@@ -1103,7 +1129,8 @@ const MODE_LABELS = {
   hseep_fullscale: 'HSEEP Full-Scale Exercise',
   boss: 'Final Boss Challenge',
   scenario: 'Scenario Mode',
-  field: 'Field Operations'
+  field: 'Field Operations',
+  surge: 'SURGE Chain Simulation'
 };
 
 function renderAdminDashboard(overlay) {
@@ -1147,6 +1174,46 @@ function renderAdminDashboard(overlay) {
       .badge-ok { color:#2ecc71; font-weight:700; }
       .badge-err { color:#e74c3c; font-weight:700; }
       select.ad-sel { padding:7px 10px; border-radius:7px; border:1px solid #333; background:#1a1a2e; color:#e0e0e0; font-size:13px; width:100%; margin-bottom:10px; outline:none; }
+      /* Live Team Battle Styles */
+      .live-pulse { display:inline-block; width:10px; height:10px; background:#e74c3c; border-radius:50%; animation:livePulse 1.2s infinite; margin-right:6px; }
+      @keyframes livePulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(1.3)} }
+      .team-card { background:linear-gradient(135deg,#1a1a2e 60%,#16213e); border-radius:14px; padding:18px; margin-bottom:14px; border:2px solid #222255; position:relative; overflow:hidden; }
+      .team-card.team-alpha { border-color:#e74c3c44; } .team-card.team-bravo { border-color:#3498db44; }
+      .team-card.team-charlie { border-color:#2ecc7144; } .team-card.team-delta { border-color:#f1c40f44; }
+      .team-card.team-echo { border-color:#9b59b644; }
+      .team-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+      .team-name { font-size:18px; font-weight:800; }
+      .team-alpha .team-name { color:#e74c3c; } .team-bravo .team-name { color:#3498db; }
+      .team-charlie .team-name { color:#2ecc71; } .team-delta .team-name { color:#f1c40f; }
+      .team-echo .team-name { color:#9b59b6; }
+      .team-score-big { font-size:32px; font-weight:900; color:#7f8fff; }
+      .team-members { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+      .member-chip { background:#16213e; border:1px solid #2a3050; border-radius:8px; padding:5px 10px; font-size:12px; display:flex; align-items:center; gap:6px; }
+      .member-chip .m-score { color:#7f8fff; font-weight:700; }
+      .member-chip .m-mode { color:#888; font-size:11px; }
+      .progress-bar-wrap { background:#0f0f23; border-radius:6px; height:8px; margin-top:8px; overflow:hidden; }
+      .progress-bar-fill { height:100%; border-radius:6px; transition:width 0.5s ease; }
+      .team-alpha .progress-bar-fill { background:linear-gradient(90deg,#e74c3c,#ff6b6b); }
+      .team-bravo .progress-bar-fill { background:linear-gradient(90deg,#3498db,#5dade2); }
+      .team-charlie .progress-bar-fill { background:linear-gradient(90deg,#2ecc71,#58d68d); }
+      .team-delta .progress-bar-fill { background:linear-gradient(90deg,#f1c40f,#f9e547); }
+      .team-echo .progress-bar-fill { background:linear-gradient(90deg,#9b59b6,#bb8fce); }
+      .leaderboard-row { display:flex; align-items:center; padding:10px 14px; border-bottom:1px solid #1a1a2e; gap:12px; }
+      .leaderboard-row:hover { background:#1c1c40; }
+      .lb-rank { font-size:20px; font-weight:900; color:#7f8fff; min-width:36px; text-align:center; }
+      .lb-rank.gold { color:#f1c40f; } .lb-rank.silver { color:#bdc3c7; } .lb-rank.bronze { color:#e67e22; }
+      .live-activity { background:#16213e; border-radius:10px; padding:12px; margin-top:10px; max-height:200px; overflow-y:auto; }
+      .activity-item { padding:4px 0; font-size:12px; color:#aaa; border-bottom:1px solid #1a1a2e; }
+      .activity-item .act-nick { color:#7f8fff; font-weight:600; }
+      .activity-item .act-mode { color:#2ecc71; }
+      .no-firebase-msg { text-align:center; padding:40px; color:#888; }
+      .no-firebase-msg h3 { color:#e74c3c; margin-bottom:10px; }
+      .live-controls { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+      .live-controls button { padding:8px 16px; border-radius:8px; border:none; font-size:13px; cursor:pointer; font-weight:600; }
+      .btn-live-start { background:#2ecc71; color:#fff; } .btn-live-start:hover { background:#27ae60; }
+      .btn-live-reset { background:#e74c3c; color:#fff; } .btn-live-reset:hover { background:#c0392b; }
+      .btn-live-export { background:#3498db; color:#fff; }
+      .fullscreen-btn { position:absolute; top:10px; right:10px; background:#7f8fff33; border:1px solid #7f8fff44; color:#7f8fff; padding:6px 12px; border-radius:6px; font-size:12px; cursor:pointer; }
     </style>
   `;
 
@@ -1329,6 +1396,114 @@ function renderAdminDashboard(overlay) {
     URL.revokeObjectURL(url);
   }
 
+  // ---- LIVE TEAM BATTLE DASHBOARD ----
+  let _liveStudents = {};
+  let _liveModeResults = {};
+  let _liveListening = false;
+
+  function startLiveListening() {
+    if (_liveListening || !window.FirebaseSync || !FirebaseSync.isReady()) return;
+    _liveListening = true;
+    FirebaseSync.onStudentsUpdate(function(data) {
+      _liveStudents = data || {};
+      if (activeTab === 'live') renderDashboard();
+    });
+    FirebaseSync.onModeResultsUpdate(function(data) {
+      _liveModeResults = data || {};
+      if (activeTab === 'live') renderDashboard();
+    });
+  }
+
+  function buildLiveTeamBattle() {
+    if (!window.FirebaseSync || !FirebaseSync.isReady()) {
+      return '<div class="no-firebase-msg"><h3>⚠️ Firebase Not Connected</h3><p>Real-time team battle requires Firebase. Check your internet connection and refresh.</p></div>';
+    }
+    startLiveListening();
+
+    const students = Object.entries(_liveStudents);
+    const TEAM_COLORS = { Alpha:'#e74c3c', Bravo:'#3498db', Charlie:'#2ecc71', Delta:'#f1c40f', Echo:'#9b59b6' };
+    const TEAM_ICONS = { Alpha:'🔴', Bravo:'🔵', Charlie:'🟢', Delta:'🟡', Echo:'🟣' };
+    const teams = {};
+    let unassigned = [];
+
+    students.forEach(function(entry) {
+      var sid = entry[0], s = entry[1];
+      if (s.team && TEAM_COLORS[s.team]) {
+        if (!teams[s.team]) teams[s.team] = { members:[], totalScore:0, modesCount:0 };
+        teams[s.team].members.push(s);
+        teams[s.team].totalScore += (s.score || 0);
+        teams[s.team].modesCount += (s.modes_completed || []).length;
+      } else {
+        unassigned.push(s);
+      }
+    });
+
+    // Sort teams by score
+    const sortedTeams = Object.entries(teams).sort(function(a,b) { return b[1].totalScore - a[1].totalScore; });
+
+    // Individual leaderboard
+    const allPlayers = students.map(function(e) { return e[1]; }).filter(function(s) { return s.nickname; }).sort(function(a,b) { return (b.score||0) - (a.score||0); });
+
+    let teamCardsHTML = '';
+    if (sortedTeams.length === 0) {
+      teamCardsHTML = '<div class="ad-card" style="text-align:center;color:#888;"><p>🏁 Waiting for players to join teams...</p><p style="font-size:12px;">Students select their team on the game start screen</p></div>';
+    }
+    sortedTeams.forEach(function(entry, idx) {
+      var tName = entry[0], tData = entry[1];
+      var maxPossible = Math.max(tData.members.length * 50000, 1);
+      var pct = Math.min(100, Math.round(tData.totalScore / maxPossible * 100));
+      var rankIcon = idx===0 ? '🏆' : idx===1 ? '🥈' : idx===2 ? '🥉' : '▪️';
+      teamCardsHTML += '<div class="team-card team-' + tName.toLowerCase() + '">';
+      teamCardsHTML += '<div class="team-header"><div><span style="font-size:22px;">' + rankIcon + '</span> <span class="team-name">' + TEAM_ICONS[tName] + ' Team ' + tName + '</span></div><div class="team-score-big">' + tData.totalScore.toLocaleString() + '</div></div>';
+      teamCardsHTML += '<div style="display:flex;gap:16px;font-size:12px;color:#888;"><span>👥 ' + tData.members.length + ' members</span><span>📋 ' + tData.modesCount + ' modes completed</span></div>';
+      teamCardsHTML += '<div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:' + pct + '%"></div></div>';
+      teamCardsHTML += '<div class="team-members">';
+      tData.members.sort(function(a,b) { return (b.score||0)-(a.score||0); }).forEach(function(m) {
+        var curMode = m.current_mode ? (' | <span class="m-mode">' + (MODE_LABELS[m.current_mode]||m.current_mode) + '</span>') : '';
+        var prog = m.current_progress ? ' (' + (m.current_progress.correct||0) + '/' + (m.current_progress.total||0) + ')' : '';
+        teamCardsHTML += '<div class="member-chip"><span>' + (m.nickname||'?') + '</span><span class="m-score">' + (m.score||0) + '</span>' + curMode + prog + '</div>';
+      });
+      teamCardsHTML += '</div></div>';
+    });
+
+    // Individual leaderboard
+    var lbHTML = '';
+    allPlayers.slice(0, 15).forEach(function(p, i) {
+      var rankClass = i===0?'gold':i===1?'silver':i===2?'bronze':'';
+      var teamBadge = p.team ? '<span style="font-size:11px;color:' + (TEAM_COLORS[p.team]||'#888') + ';">' + (TEAM_ICONS[p.team]||'') + ' ' + p.team + '</span>' : '';
+      var curMode = p.current_mode ? '<span style="font-size:11px;color:#2ecc71;">▶ ' + (MODE_LABELS[p.current_mode]||p.current_mode) + '</span>' : '';
+      lbHTML += '<div class="leaderboard-row"><div class="lb-rank ' + rankClass + '">' + (i+1) + '</div><div style="flex:1;"><div style="font-weight:600;">' + (p.nickname||'?') + ' ' + teamBadge + '</div><div style="font-size:11px;color:#666;">' + curMode + '</div></div><div style="font-weight:800;color:#7f8fff;font-size:16px;">' + (p.score||0).toLocaleString() + '</div></div>';
+    });
+
+    var unassignedHTML = '';
+    if (unassigned.length > 0) {
+      unassignedHTML = '<div class="ad-card" style="margin-top:14px;"><h3>⚠️ Unassigned Players (' + unassigned.length + ')</h3><div class="team-members">';
+      unassigned.forEach(function(u) {
+        unassignedHTML += '<div class="member-chip"><span>' + (u.nickname||'?') + '</span><span class="m-score">' + (u.score||0) + '</span></div>';
+      });
+      unassignedHTML += '</div></div>';
+    }
+
+    return '<div style="position:relative;">' +
+      '<div class="live-controls">' +
+        '<div style="flex:1;display:flex;align-items:center;"><span class="live-pulse"></span><span style="color:#e74c3c;font-weight:700;font-size:14px;">LIVE</span><span style="color:#888;font-size:13px;margin-left:8px;">👥 ' + students.length + ' connected</span></div>' +
+        '<button class="btn-live-export" id="live-export-btn">📥 Export Data</button>' +
+        '<button class="btn-live-reset" id="live-reset-btn">🗑️ Reset All</button>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">' +
+        '<div>' +
+          '<div class="ad-card"><h3>🏆 Team Standings</h3></div>' +
+          teamCardsHTML +
+          unassignedHTML +
+        '</div>' +
+        '<div>' +
+          '<div class="ad-card"><h3>👤 Individual Leaderboard</h3></div>' +
+          '<div class="ad-card" style="padding:0;overflow:auto;max-height:600px;">' + (lbHTML || '<p style="padding:14px;color:#888;">No players yet</p>') + '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
   function renderDashboard() {
     const sessions = LocalStore.getSessions();
     let tabContent = '';
@@ -1336,6 +1511,7 @@ function renderAdminDashboard(overlay) {
     else if (activeTab === 'students') tabContent = buildStudents(sessions, nickFilter, sortCol, sortAsc);
     else if (activeTab === 'modes') tabContent = buildModeAnalysis(sessions);
     else if (activeTab === 'detail') tabContent = buildDetailedData(sessions, selectedSessionIdx);
+    else if (activeTab === 'live') tabContent = buildLiveTeamBattle();
 
     overlay.innerHTML = styles + `
       <div id="ad-root">
@@ -1344,6 +1520,7 @@ function renderAdminDashboard(overlay) {
           <button id="ad-close">✕ Close</button>
         </div>
         <div id="ad-tabs">
+          <button class="${activeTab==='live'?'active':''}" data-tab="live"><span class="live-pulse"></span> Live Battle</button>
           <button class="${activeTab==='overview'?'active':''}" data-tab="overview">📊 Overview</button>
           <button class="${activeTab==='students'?'active':''}" data-tab="students">👥 Students</button>
           <button class="${activeTab==='modes'?'active':''}" data-tab="modes">📈 Mode Analysis</button>
@@ -1397,6 +1574,36 @@ function renderAdminDashboard(overlay) {
         });
       }
     }
+
+    // Live Battle tab events
+    if (activeTab === 'live') {
+      const resetBtn = overlay.querySelector('#live-reset-btn');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+          if (confirm('Reset all live data? This will clear all current session data from Firebase.')) {
+            if (window.FirebaseSync) FirebaseSync.clearLiveData();
+            _liveStudents = {};
+            _liveModeResults = {};
+            renderDashboard();
+          }
+        });
+      }
+      const exportBtn = overlay.querySelector('#live-export-btn');
+      if (exportBtn) {
+        exportBtn.addEventListener('click', () => {
+          const rows = [['Nickname','Team','Score','Level','Streak','Modes Completed','Current Mode','Device','Started']];
+          Object.values(_liveStudents).forEach(s => {
+            rows.push([s.nickname||'',s.team||'',s.score||0,s.level||1,s.streak||0,(s.modes_completed||[]).join('|'),s.current_mode||'',s.device||'',s.started_at||'']);
+          });
+          const csv = rows.map(r => r.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+          const blob = new Blob([csv], {type:'text/csv'});
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = 'live_team_battle_data.csv'; a.click();
+          URL.revokeObjectURL(url);
+        });
+      }
+    }
   }
 
   // Show login screen first
@@ -1440,6 +1647,7 @@ function startGame() {
   const nick = $('nick').value.trim();
   if (!nick) return;
   G.nickname = nick;
+  G.team = (document.getElementById('team-select') || {}).value || '';
   G.score = 0;
   G.xp = 0;
   G.level = 1;
@@ -1582,14 +1790,15 @@ function renderModeSelect() {
             </div>
           </button>`;
         }).join('')}
-        <button class="mode-card emergo-card" data-mode="emergo" onclick="G.screen='emergoSelect';render();">
+        <button class="mode-card surge-card" data-mode="surge" onclick="G.screen='surgeSelect';render();">
           <div class="mode-icon">🏥</div>
           <div class="mode-info">
-            <h3>EMERGO Chain ${G.modesCompleted.has('emergo') ? '✅' : '🆕'}</h3>
-            <p>Scene→CCP→Transport→Hospital — Chain scenario</p>
+            <h3>SURGE Chain ${G.modesCompleted.has('surge') ? '✅' : '🆕'}</h3>
+            <p style="font-size:0.7rem;color:#7f8fff;margin-bottom:2px;">Simulated Urgent Response & Group Exercise</p>
+            <p>Scene→CCP→Transport→Hospital Chain Simulation</p>
             <div class="mode-tag-row">
               <span class="mode-tag">Full Response</span>
-              <span class="mode-tag emergo-tag">EMERGO</span>
+              <span class="mode-tag surge-tag">SURGE</span>
             </div>
           </div>
         </button>
@@ -2659,21 +2868,22 @@ function getGradeByScore() {
 }
 
 // =============================================
-// EMERGO CHAIN MODE — Sequential Chain Scenario
+// SURGE CHAIN MODE — Sequential Chain Scenario
 // =============================================
 
-function renderEmergoSelect() {
+function renderSurgeSelect() {
   app.innerHTML = `
-    <div class="screen emergo-screen">
-      ${renderHUD('emergo')}
-      <div class="emergo-header anim-in">
-        <div class="emergo-badge">🏥 EMERGO</div>
+    <div class="screen surge-screen">
+      ${renderHUD('surge')}
+      <div class="surge-header anim-in">
+        <div class="surge-badge">🏥 SURGE</div>
         <h2>Chain Scenario</h2>
+        <p style="font-size:0.8rem;color:#7f8fff;margin:4px 0;">Simulated Urgent Response & Group Exercise</p>
         <p>From the scene to the hospital — experience the full disaster response chain</p>
       </div>
-      <div class="emergo-scenario-list stagger">
-        ${EMERGO_CHAIN_SCENARIOS.map((sc, i) => `
-          <button class="emergo-scenario-card" onclick="startEmergoChain(${i})">
+      <div class="surge-scenario-list stagger">
+        ${SURGE_CHAIN_SCENARIOS.map((sc, i) => `
+          <button class="surge-scenario-card" onclick="startSurgeChain(${i})">
             <div class="esc-icon">${sc.phases[0].icon}</div>
             <div class="esc-info">
               <h3>${sc.title}</h3>
@@ -2691,13 +2901,13 @@ function renderEmergoSelect() {
     </div>`;
 }
 
-function startEmergoChain(scenarioIdx) {
-  const sc = EMERGO_CHAIN_SCENARIOS[scenarioIdx];
-  G.emergo = {
+function startSurgeChain(scenarioIdx) {
+  const sc = SURGE_CHAIN_SCENARIOS[scenarioIdx];
+  G.surge = {
     scenarioIdx,
     scenario: sc,
     patients: sc.patientIds.map(id => {
-      const p = EMERGO_PATIENTS.find(ep => ep.id === id);
+      const p = SURGE_PATIENTS.find(ep => ep.id === id);
       return { ...p, currentTriage: null, sortCategory: null, treated: false, treatMinute: null, interventionsDone: [], assignedResource: null, transported: false, transportOrder: 0, edStabilized: false, outcome: null };
     }),
     phaseIdx: 0,
@@ -2726,29 +2936,29 @@ function startEmergoChain(scenarioIdx) {
     _ambulancesAvail: null,
     _edProcessed: null
   };
-  G.screen = 'emergo';
-  Tracker.startMode('emergo_chain');
+  G.screen = 'surge';
+  Tracker.startMode('surge_chain');
   Tracker.startQuestion();
-  renderEmergoPhase();
+  renderSurgePhase();
 }
 
-function renderEmergoPhase() {
-  const em = G.emergo;
+function renderSurgePhase() {
+  const em = G.surge;
   if (!em || !em.scenario) { G.screen = 'modes'; render(); return; }
   const phase = em.scenario.phases[em.phaseIdx];
-  if (!phase) { showEmergoFinalResults(); return; }
+  if (!phase) { showSurgeFinalResults(); return; }
 
-  if (phase.task === 'sieve_triage') renderEmergoSieve(phase);
-  else if (phase.task === 'sort_and_treat') renderEmergoSort(phase);
-  else if (phase.task === 'decontamination') renderEmergoDecontam(phase);
-  else if (phase.task === 'transport_priority') renderEmergoTransport(phase);
-  else if (phase.task === 'ed_management') renderEmergoED(phase);
-  else { showEmergoFinalResults(); }
+  if (phase.task === 'sieve_triage') renderSurgeSieve(phase);
+  else if (phase.task === 'sort_and_treat') renderSurgeSort(phase);
+  else if (phase.task === 'decontamination') renderSurgeDecontam(phase);
+  else if (phase.task === 'transport_priority') renderSurgeTransport(phase);
+  else if (phase.task === 'ed_management') renderSurgeED(phase);
+  else { showSurgeFinalResults(); }
 }
 
 // ---- PHASE 1: Sieve Triage ----
-function renderEmergoSieve(phase) {
-  const em = G.emergo;
+function renderSurgeSieve(phase) {
+  const em = G.surge;
   if (em._sieveIdx == null) em._sieveIdx = 0;
   if (em._sieveCorrect == null) em._sieveCorrect = 0;
 
@@ -2757,17 +2967,17 @@ function renderEmergoSieve(phase) {
 
   if (!currentP || em._sieveIdx >= patients.length) {
     // Sieve complete → stop timer then move to next phase
-    stopTimer('emergo_sieve');
+    stopTimer('surge_sieve');
     em.phaseScore = Math.round((em._sieveCorrect / patients.length) * 100);
     addScore(em._sieveCorrect * 150);
     addXP(em._sieveCorrect * 30);
     em.phaseIdx++;
     em._sieveIdx = 0;
-    showEmergoPhaseTransition();
+    showSurgePhaseTransition();
     return;
   }
 
-  const timeKey = 'emergo_sieve';
+  const timeKey = 'surge_sieve';
   // Timer starts only on first render (prevent reset per patient)
   if (em._sieveIdx === 0 && !em._sieveTimerStarted) {
     em._sieveTimerStarted = true;
@@ -2781,7 +2991,7 @@ function renderEmergoSieve(phase) {
       addXP(em._sieveCorrect * 30);
       em.phaseIdx++;
       em._sieveIdx = 0;
-      showEmergoPhaseTransition();
+      showSurgePhaseTransition();
     });
   }
 
@@ -2789,15 +2999,15 @@ function renderEmergoSieve(phase) {
   const sieveHint = phase.hint || '';
 
   app.innerHTML = `
-    <div class="screen emergo-play-screen">
+    <div class="screen surge-play-screen">
       ${renderHUD(timeKey)}
-      <div class="emergo-phase-bar">
+      <div class="surge-phase-bar">
         <span class="phase-icon">${phase.icon}</span>
         <span class="phase-name">${phase.name}</span>
         <span class="phase-progress">${progress}</span>
       </div>
 
-      <div class="emergo-patient-card anim-in">
+      <div class="surge-patient-card anim-in">
         <div class="epc-header">
           <span class="epc-icon">${currentP.icon}</span>
           <div class="epc-info">
@@ -2823,21 +3033,21 @@ function renderEmergoSieve(phase) {
         </div>
       </div>
 
-      <div class="emergo-triage-buttons anim-in">
-        <button class="etb red" onclick="emergoSieveAnswer('red')">🔴 Immediate (RED)</button>
-        <button class="etb yellow" onclick="emergoSieveAnswer('yellow')">🟡 Urgent (YELLOW)</button>
-        <button class="etb green" onclick="emergoSieveAnswer('green')">🟢 Delayed (GREEN)</button>
-        <button class="etb black" onclick="emergoSieveAnswer('black')">⚫ Deceased (BLACK)</button>
+      <div class="surge-triage-buttons anim-in">
+        <button class="etb red" onclick="surgeSieveAnswer('red')">🔴 Immediate (RED)</button>
+        <button class="etb yellow" onclick="surgeSieveAnswer('yellow')">🟡 Urgent (YELLOW)</button>
+        <button class="etb green" onclick="surgeSieveAnswer('green')">🟢 Delayed (GREEN)</button>
+        <button class="etb black" onclick="surgeSieveAnswer('black')">⚫ Deceased (BLACK)</button>
       </div>
 
-      <div class="emergo-hint">
+      <div class="surge-hint">
         <details><summary>💡 Sieve Algorithm Hint</summary><p>${sieveHint}</p></details>
       </div>
     </div>`;
 }
 
-function emergoSieveAnswer(answer) {
-  const em = G.emergo;
+function surgeSieveAnswer(answer) {
+  const em = G.surge;
   const p = em.patients[em._sieveIdx];
   const correct = p.correctSieve;
   p.currentTriage = answer;
@@ -2858,19 +3068,19 @@ function emergoSieveAnswer(answer) {
 
   // Brief feedback
   const fb = document.createElement('div');
-  fb.className = `emergo-feedback ${isCorrect ? 'correct' : 'wrong'} anim-in`;
+  fb.className = `surge-feedback ${isCorrect ? 'correct' : 'wrong'} anim-in`;
   fb.innerHTML = `${isCorrect ? '✅ Correct!' : `❌ ${correct.toUpperCase()}`} — ${p.name}`;
-  document.querySelector('.emergo-play-screen')?.appendChild(fb);
+  document.querySelector('.surge-play-screen')?.appendChild(fb);
 
   setTimeout(() => {
     em._sieveIdx++;
-    renderEmergoSieve(em.scenario.phases[em.phaseIdx]);
+    renderSurgeSieve(em.scenario.phases[em.phaseIdx]);
   }, 800);
 }
 
 // ---- PHASE 2: Sort & Treat ----
-function renderEmergoSort(phase) {
-  const em = G.emergo;
+function renderSurgeSort(phase) {
+  const em = G.surge;
   // Only non-black patients continue
   const activePatients = em.patients.filter(p => p.currentTriage !== 'black');
   if (em._sortIdx == null) em._sortIdx = 0;
@@ -2882,36 +3092,36 @@ function renderEmergoSort(phase) {
     const currentP = activePatients[em._sortIdx];
     if (!currentP || em._sortIdx >= activePatients.length) {
       // Sort complete → stop timer then move to treatment assignment phase
-      stopTimer('emergo_sort');
+      stopTimer('surge_sort');
       em._treatPhase = true;
       em._sortIdx = 0;
-      renderEmergoTreat(phase);
+      renderSurgeTreat(phase);
       return;
     }
 
     const trts = sortScore(currentP);
     const expectedSort = sortCategory(currentP);
 
-    const timeKey = 'emergo_sort';
+    const timeKey = 'surge_sort';
     // Timer starts only on first render
     if (em._sortIdx === 0 && !em._sortTimerStarted) {
       em._sortTimerStarted = true;
       startCountdown(timeKey, phase.timeLimit, null, () => {
         em._treatPhase = true;
-        renderEmergoTreat(phase);
+        renderSurgeTreat(phase);
       });
     }
 
     app.innerHTML = `
-      <div class="screen emergo-play-screen">
+      <div class="screen surge-play-screen">
         ${renderHUD(timeKey)}
-        <div class="emergo-phase-bar">
+        <div class="surge-phase-bar">
           <span class="phase-icon">${phase.icon}</span>
           <span class="phase-name">${phase.name} — Sort Classification</span>
           <span class="phase-progress">${em._sortIdx + 1}/${activePatients.length}</span>
         </div>
 
-        <div class="emergo-patient-card anim-in">
+        <div class="surge-patient-card anim-in">
           <div class="epc-header">
             <span class="epc-icon">${currentP.icon}</span>
             <div class="epc-info">
@@ -2930,21 +3140,21 @@ function renderEmergoSort(phase) {
           </div>
         </div>
 
-        <div class="emergo-sort-buttons anim-in">
-          <button class="etb t1" onclick="emergoSortAnswer('T1')">🔴 T1 (Immediate)</button>
-          <button class="etb t2" onclick="emergoSortAnswer('T2')">🟡 T2 (Urgent)</button>
-          <button class="etb t3" onclick="emergoSortAnswer('T3')">🟢 T3 (Delayed)</button>
+        <div class="surge-sort-buttons anim-in">
+          <button class="etb t1" onclick="surgeSortAnswer('T1')">🔴 T1 (Immediate)</button>
+          <button class="etb t2" onclick="surgeSortAnswer('T2')">🟡 T2 (Urgent)</button>
+          <button class="etb t3" onclick="surgeSortAnswer('T3')">🟢 T3 (Delayed)</button>
         </div>
 
-        <div class="emergo-hint">
+        <div class="surge-hint">
           <details><summary>💡 Sort (TRTS) Hint</summary><p>${phase.hint}</p></details>
         </div>
       </div>`;
   }
 }
 
-function emergoSortAnswer(answer) {
-  const em = G.emergo;
+function surgeSortAnswer(answer) {
+  const em = G.surge;
   const activePatients = em.patients.filter(p => p.currentTriage !== 'black');
   const p = activePatients[em._sortIdx];
   const expected = sortCategory(p);
@@ -2958,13 +3168,13 @@ function emergoSortAnswer(answer) {
 
   setTimeout(() => {
     em._sortIdx++;
-    renderEmergoSort(em.scenario.phases[em.phaseIdx]);
+    renderSurgeSort(em.scenario.phases[em.phaseIdx]);
   }, 600);
 }
 
 // ---- PHASE 2B: Treatment Assignment ----
-function renderEmergoTreat(phase) {
-  const em = G.emergo;
+function renderSurgeTreat(phase) {
+  const em = G.surge;
   const t1Patients = em.patients.filter(p => (p.sortCategory === 'T1' || p.currentTriage === 'red') && p.currentTriage !== 'black');
   const t2Patients = em.patients.filter(p => (p.sortCategory === 'T2' || p.currentTriage === 'yellow') && p.currentTriage !== 'black' && p.sortCategory !== 'T1');
 
@@ -2993,7 +3203,7 @@ function renderEmergoTreat(phase) {
     em.phaseIdx++;
     em._sortIdx = 0; em._sortCorrect = 0; em._treatPhase = false;
     em._treatCurrent = 0; em._treatAssignments = {};
-    showEmergoPhaseTransition();
+    showSurgePhaseTransition();
     return;
   }
 
@@ -3007,15 +3217,15 @@ function renderEmergoTreat(phase) {
   const assigned = em._treatAssignments[currentP.id] || [];
 
   app.innerHTML = `
-    <div class="screen emergo-play-screen">
-      ${renderHUD('emergo_sort')}
-      <div class="emergo-phase-bar">
+    <div class="screen surge-play-screen">
+      ${renderHUD('surge_sort')}
+      <div class="surge-phase-bar">
         <span class="phase-icon">💊</span>
         <span class="phase-name">Treatment Assignment</span>
         <span class="phase-progress">${em._treatCurrent + 1}/${criticalPatients.length}</span>
       </div>
 
-      <div class="emergo-patient-card mini anim-in">
+      <div class="surge-patient-card mini anim-in">
         <div class="epc-header">
           <span class="epc-icon">${currentP.icon}</span>
           <div class="epc-info">
@@ -3028,14 +3238,14 @@ function renderEmergoTreat(phase) {
         </div>
       </div>
 
-      <div class="emergo-treat-grid anim-in">
+      <div class="surge-treat-grid anim-in">
         <p class="treat-instruction">Select required treatments (multiple choice):</p>
         <div class="treat-options">
           ${options.map(key => {
             const iv = INTERVENTIONS[key];
             if (!iv) return '';
             const isSelected = assigned.includes(key);
-            return `<button class="treat-btn ${isSelected ? 'selected' : ''}" onclick="toggleEmergoTreat('${currentP.id}','${key}')">
+            return `<button class="treat-btn ${isSelected ? 'selected' : ''}" onclick="toggleSurgeTreat('${currentP.id}','${key}')">
               <span class="tb-icon">${iv.icon}</span>
               <span class="tb-name">${iv.name}</span>
               <span class="tb-time">${iv.timeIdeal} min</span>
@@ -3044,29 +3254,29 @@ function renderEmergoTreat(phase) {
         </div>
       </div>
 
-      <button class="btn-primary" style="margin-top:16px" onclick="confirmEmergoTreat()">Confirm →</button>
+      <button class="btn-primary" style="margin-top:16px" onclick="confirmSurgeTreat()">Confirm →</button>
     </div>`;
 }
 
-function toggleEmergoTreat(patientId, interventionKey) {
-  const em = G.emergo;
+function toggleSurgeTreat(patientId, interventionKey) {
+  const em = G.surge;
   if (!em._treatAssignments[patientId]) em._treatAssignments[patientId] = [];
   const arr = em._treatAssignments[patientId];
   const idx = arr.indexOf(interventionKey);
   if (idx >= 0) arr.splice(idx, 1);
   else arr.push(interventionKey);
-  renderEmergoTreat(em.scenario.phases[em.phaseIdx]);
+  renderSurgeTreat(em.scenario.phases[em.phaseIdx]);
 }
 
-function confirmEmergoTreat() {
-  const em = G.emergo;
+function confirmSurgeTreat() {
+  const em = G.surge;
   em._treatCurrent++;
-  renderEmergoTreat(em.scenario.phases[em.phaseIdx]);
+  renderSurgeTreat(em.scenario.phases[em.phaseIdx]);
 }
 
 // ---- PHASE 3: Decontamination (CBRNE scenarios) ----
-function renderEmergoDecontam(phase) {
-  const em = G.emergo;
+function renderSurgeDecontam(phase) {
+  const em = G.surge;
   const activePatients = em.patients.filter(p => p.currentTriage !== 'black');
   if (!em._deconQueue) {
     // Sort by severity — T1 first
@@ -3086,28 +3296,28 @@ function renderEmergoDecontam(phase) {
     addXP(em._deconDone.length * 15);
     em.phaseIdx++;
     em._deconQueue = null; em._deconDone = null;
-    showEmergoPhaseTransition();
+    showSurgePhaseTransition();
     return;
   }
 
   // Player picks priority order
   app.innerHTML = `
-    <div class="screen emergo-play-screen">
-      ${renderHUD('emergo_sort')}
-      <div class="emergo-phase-bar">
+    <div class="screen surge-play-screen">
+      ${renderHUD('surge_sort')}
+      <div class="surge-phase-bar">
         <span class="phase-icon">${phase.icon}</span>
         <span class="phase-name">${phase.name}</span>
         <span class="phase-progress">${em._deconDone.length}/${activePatients.length} Complete</span>
       </div>
 
-      <div class="emergo-decon-info anim-in">
+      <div class="surge-decon-info anim-in">
         <p>🚿 Decon stations: <strong>${em._deconSlots}</strong> | Time per patient: <strong>${phase.decontamTimePerPatient} min</strong></p>
         <p>Select next patient for decontamination (critical first):</p>
       </div>
 
-      <div class="emergo-decon-list anim-in">
+      <div class="surge-decon-list anim-in">
         ${remaining.map(p => `
-          <button class="decon-patient-btn" onclick="emergoDeconSelect('${p.id}')">
+          <button class="decon-patient-btn" onclick="surgeDeconSelect('${p.id}')">
             <span class="dp-icon">${p.icon}</span>
             <span class="dp-name">${p.name}</span>
             <span class="dp-triage triage-${p.currentTriage}">${p.currentTriage?.toUpperCase()}</span>
@@ -3118,16 +3328,16 @@ function renderEmergoDecontam(phase) {
     </div>`;
 }
 
-function emergoDeconSelect(patientId) {
-  const em = G.emergo;
+function surgeDeconSelect(patientId) {
+  const em = G.surge;
   em._deconDone.push(patientId);
   em.gameMinute += (em.scenario.phases[em.phaseIdx].decontamTimePerPatient || 5);
-  renderEmergoDecontam(em.scenario.phases[em.phaseIdx]);
+  renderSurgeDecontam(em.scenario.phases[em.phaseIdx]);
 }
 
 // ---- PHASE: Transport Priority ----
-function renderEmergoTransport(phase) {
-  const em = G.emergo;
+function renderSurgeTransport(phase) {
+  const em = G.surge;
   const treatedPatients = em.patients.filter(p => p.currentTriage !== 'black' && p.currentTriage !== 'green');
 
   if (!em._transportOrder) em._transportOrder = [];
@@ -3152,27 +3362,27 @@ function renderEmergoTransport(phase) {
     addXP(tScore / 5);
     em.phaseIdx++;
     em._transportOrder = null; em._ambulancesAvail = null;
-    showEmergoPhaseTransition();
+    showSurgePhaseTransition();
     return;
   }
 
   app.innerHTML = `
-    <div class="screen emergo-play-screen">
-      ${renderHUD('emergo_sort')}
-      <div class="emergo-phase-bar">
+    <div class="screen surge-play-screen">
+      ${renderHUD('surge_sort')}
+      <div class="surge-phase-bar">
         <span class="phase-icon">${phase.icon}</span>
         <span class="phase-name">${phase.name}</span>
         <span class="phase-progress">🚑 ${em._ambulancesAvail} remaining</span>
       </div>
 
-      <div class="emergo-transport-info anim-in">
+      <div class="surge-transport-info anim-in">
         <p>Determine transport order. Ambulances: <strong>${em._ambulancesAvail}</strong>, Round-trip: ${phase.transportTimeMin}-${phase.transportTimeMax} min</p>
         <p>Transported: ${em._transportOrder.length} patients</p>
       </div>
 
-      <div class="emergo-transport-list anim-in">
+      <div class="surge-transport-list anim-in">
         ${remaining.map(p => `
-          <button class="transport-patient-btn" onclick="emergoTransportSelect('${p.id}')">
+          <button class="transport-patient-btn" onclick="surgeTransportSelect('${p.id}')">
             <span class="tp-icon">${p.icon}</span>
             <span class="tp-name">${p.name}</span>
             <span class="tp-triage triage-${p.currentTriage}">${p.sortCategory || p.currentTriage?.toUpperCase()}</span>
@@ -3184,8 +3394,8 @@ function renderEmergoTransport(phase) {
     </div>`;
 }
 
-function emergoTransportSelect(patientId) {
-  const em = G.emergo;
+function surgeTransportSelect(patientId) {
+  const em = G.surge;
   const phase = em.scenario.phases[em.phaseIdx];
   em._transportOrder.push(patientId);
   em._ambulancesAvail--;
@@ -3196,12 +3406,12 @@ function emergoTransportSelect(patientId) {
     if (em._ambulancesAvail !== null) em._ambulancesAvail++;
   }, 0);
 
-  renderEmergoTransport(phase);
+  renderSurgeTransport(phase);
 }
 
 // ---- PHASE: ED Management ----
-function renderEmergoED(phase) {
-  const em = G.emergo;
+function renderSurgeED(phase) {
+  const em = G.surge;
   const arrivedPatients = em.patients.filter(p => p.transported);
 
   if (!em._edProcessed) em._edProcessed = [];
@@ -3212,7 +3422,7 @@ function renderEmergoED(phase) {
     addScore(em._edProcessed.length * 150);
     addXP(em._edProcessed.length * 25);
     em.phaseIdx++;
-    showEmergoPhaseTransition();
+    showSurgePhaseTransition();
     return;
   }
 
@@ -3226,15 +3436,15 @@ function renderEmergoED(phase) {
   ];
 
   app.innerHTML = `
-    <div class="screen emergo-play-screen">
-      ${renderHUD('emergo_sort')}
-      <div class="emergo-phase-bar">
+    <div class="screen surge-play-screen">
+      ${renderHUD('surge_sort')}
+      <div class="surge-phase-bar">
         <span class="phase-icon">${phase.icon}</span>
         <span class="phase-name">${phase.name}</span>
         <span class="phase-progress">${em._edProcessed.length + 1}/${arrivedPatients.length}</span>
       </div>
 
-      <div class="emergo-patient-card anim-in">
+      <div class="surge-patient-card anim-in">
         <div class="epc-header">
           <span class="epc-icon">${currentP.icon}</span>
           <div class="epc-info">
@@ -3250,10 +3460,10 @@ function renderEmergoED(phase) {
         </div>
       </div>
 
-      <div class="emergo-ed-actions anim-in">
+      <div class="surge-ed-actions anim-in">
         <p>Select the next action for this patient:</p>
         ${edActions.map(a => `
-          <button class="ed-action-btn" onclick="emergoEdDecision('${currentP.id}','${a.key}')">
+          <button class="ed-action-btn" onclick="surgeEdDecision('${currentP.id}','${a.key}')">
             <span class="ea-icon">${a.icon}</span>
             <div class="ea-info"><strong>${a.label}</strong><span>${a.desc}</span></div>
           </button>
@@ -3262,8 +3472,8 @@ function renderEmergoED(phase) {
     </div>`;
 }
 
-function emergoEdDecision(patientId, action) {
-  const em = G.emergo;
+function surgeEdDecision(patientId, action) {
+  const em = G.surge;
   const p = em.patients.find(pp => pp.id === patientId);
   if (!p) return;
 
@@ -3279,33 +3489,33 @@ function emergoEdDecision(patientId, action) {
   p.edStabilized = true;
   addScore(bonus);
   em._edProcessed.push(patientId);
-  renderEmergoED(em.scenario.phases[em.phaseIdx]);
+  renderSurgeED(em.scenario.phases[em.phaseIdx]);
 }
 
 // ---- Phase Transition ----
-function showEmergoPhaseTransition() {
-  const em = G.emergo;
+function showSurgePhaseTransition() {
+  const em = G.surge;
   if (!em || !em.scenario) { G.screen = 'modes'; render(); return; }
 
-  // Stop all EMERGO timers
-  stopTimer('emergo_sieve');
-  stopTimer('emergo_sort');
+  // Stop all SURGE timers
+  stopTimer('surge_sieve');
+  stopTimer('surge_sort');
 
   const nextPhase = em.scenario.phases[em.phaseIdx];
   const prevPhase = em.scenario.phases[em.phaseIdx - 1];
 
   if (!nextPhase) {
-    showEmergoFinalResults();
+    showSurgeFinalResults();
     return;
   }
 
   app.innerHTML = `
-    <div class="screen emergo-transition-screen">
-      <div class="emergo-phase-complete anim-in">
+    <div class="screen surge-transition-screen">
+      <div class="surge-phase-complete anim-in">
         <div class="epc-check">✅</div>
         <h2>${prevPhase?.name || ''} Complete!</h2>
       </div>
-      <div class="emergo-next-phase anim-in">
+      <div class="surge-next-phase anim-in">
         <div class="enp-icon">${nextPhase.icon}</div>
         <h3>Next: ${nextPhase.name}</h3>
         <p>${nextPhase.description}</p>
@@ -3318,18 +3528,18 @@ function showEmergoPhaseTransition() {
           </div>
         ` : ''}
       </div>
-      <button class="btn-primary anim-in" onclick="renderEmergoPhase()">Continue →</button>
+      <button class="btn-primary anim-in" onclick="renderSurgePhase()">Continue →</button>
     </div>`;
 }
 
 // ---- Final Results ----
-function showEmergoFinalResults() {
-  const em = G.emergo;
+function showSurgeFinalResults() {
+  const em = G.surge;
   if (!em) { G.screen = 'modes'; render(); return; }
 
-  // Stop all EMERGO timers
-  stopTimer('emergo_sieve');
-  stopTimer('emergo_sort');
+  // Stop all SURGE timers
+  stopTimer('surge_sieve');
+  stopTimer('surge_sort');
 
   // Calculate preventable deaths
   let preventable = 0, totalDeaths = 0, survived = 0;
@@ -3352,9 +3562,9 @@ function showEmergoFinalResults() {
   const grade = preventable === 0 ? 'S' : preventable <= 1 ? 'A' : preventable <= 2 ? 'B' : 'C';
 
   // RPG integration
-  G.modesCompleted.add('emergo');
-  if (preventable === 0) G.emergoZeroPD = true;
-  advanceStoryAct('emergo');
+  G.modesCompleted.add('surge');
+  if (preventable === 0) G.surgeZeroPD = true;
+  advanceStoryAct('surge');
   addScore(preventable === 0 ? 2000 : 1000);
   addXP(300 - preventable * 50);
   checkAchievements();
@@ -3365,15 +3575,15 @@ function showEmergoFinalResults() {
   if (grade === 'S' || grade === 'A') { try { confetti(); } catch(e) {} }
 
   app.innerHTML = `
-    <div class="screen emergo-results-screen">
-      <div class="emergo-results-header anim-in">
-        <div class="er-badge">🏥 EMERGO CHAIN Complete</div>
+    <div class="screen surge-results-screen">
+      <div class="surge-results-header anim-in">
+        <div class="er-badge">🏥 SURGE CHAIN Complete</div>
         <h2>${em.scenario.title}</h2>
       </div>
 
       <div class="result-grade ${gradeClass} anim-in">Grade: ${grade}</div>
 
-      <div class="emergo-result-stats anim-in">
+      <div class="surge-result-stats anim-in">
         <div class="ers-card">
           <div class="ers-val">${survived}</div>
           <div class="ers-label">Survived</div>
@@ -3396,7 +3606,7 @@ function showEmergoFinalResults() {
         </div>
       </div>
 
-      <div class="emergo-patient-outcomes anim-in">
+      <div class="surge-patient-outcomes anim-in">
         <h3>Patient Outcomes</h3>
         <div class="epo-list">
           ${em.patients.map(p => {
@@ -3413,7 +3623,7 @@ function showEmergoFinalResults() {
         </div>
       </div>
 
-      <div class="emergo-debrief anim-in">
+      <div class="surge-debrief anim-in">
         <h3>📋 Debriefing</h3>
         <div class="debrief-text">
           ${preventable === 0 ? 'All savable patients were saved. A perfect chain from scene to hospital.' :
@@ -3424,11 +3634,11 @@ function showEmergoFinalResults() {
 
       <div class="result-actions anim-in">
         <button class="btn-primary" onclick="G.screen='modes';render();">Select Mission 🏠</button>
-        <button class="btn-outline" onclick="G.screen='emergoSelect';render();">Other Scenarios 🔄</button>
+        <button class="btn-outline" onclick="G.screen='surgeSelect';render();">Other Scenarios 🔄</button>
       </div>
     </div>`;
 
-  G.screen = 'emergoResults';
+  G.screen = 'surgeResults';
 }
 
 // ---- INIT ----
