@@ -3936,6 +3936,11 @@ if (typeof module !== 'undefined' && module.exports) {
     HSEEP_TEMPLATES,
     HSEEP_CAMPAIGN
   };
+} else if (typeof window !== 'undefined') {
+  window.HSEEP_QUIZ_QUESTIONS = HSEEP_QUIZ_QUESTIONS;
+  window.HSEEP_SCENARIOS = HSEEP_SCENARIOS;
+  window.HSEEP_TEMPLATES = HSEEP_TEMPLATES;
+  window.HSEEP_CAMPAIGN = HSEEP_CAMPAIGN;
 }
 
 // ============================================
