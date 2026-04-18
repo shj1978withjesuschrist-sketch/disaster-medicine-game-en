@@ -6734,7 +6734,27 @@ function renderHSEEPTemplate() {
     if (st.keyIssues) secContentHtml += '<div style="font-size:0.8rem;color:var(--text-muted);padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.06)"><strong>Key Issues:</strong> ' + st.keyIssues + '</div>';
     if (st.discussionQuestions) secContentHtml += '<div style="font-size:0.8rem;color:var(--text-muted);padding:6px 0"><strong>Discussion Questions:</strong> ' + st.discussionQuestions + '</div>';
   } else if (section.content) {
-    secContentHtml += '<div style="font-size:0.82rem;color:var(--text-muted);padding:6px 0">' + section.content + '</div>';
+    secContentHtml += '<div style="font-size:0.82rem;color:var(--text-muted);padding:6px 0;line-height:1.6">' + section.content + '</div>';
+  }
+  // Handle observationFormat at section level (AAR/IP capability analysis)
+  if (section.observationFormat) {
+    var obs = section.observationFormat;
+    if (obs.strengthObservation) {
+      secContentHtml += '<div style="background:rgba(76,175,80,0.08);border:1px solid rgba(76,175,80,0.2);border-radius:8px;padding:10px;margin-top:8px">';
+      secContentHtml += '<div style="font-size:0.82rem;font-weight:700;color:#66bb6a;margin-bottom:6px">\u2705 Strength Example: ' + obs.strengthObservation.title + '</div>';
+      secContentHtml += '<div style="font-size:0.76rem;color:var(--text-muted);line-height:1.5"><strong>Reference:</strong> ' + obs.strengthObservation.reference + '</div>';
+      secContentHtml += '<div style="font-size:0.76rem;color:var(--text-muted);line-height:1.5;margin-top:4px"><strong>Analysis:</strong> ' + obs.strengthObservation.analysis + '</div>';
+      secContentHtml += '<div style="font-size:0.76rem;color:var(--text-muted);line-height:1.5;margin-top:4px"><strong>Recommendation:</strong> ' + obs.strengthObservation.recommendation + '</div>';
+      secContentHtml += '</div>';
+    }
+    if (obs.improvementObservation) {
+      secContentHtml += '<div style="background:rgba(255,82,82,0.08);border:1px solid rgba(255,82,82,0.2);border-radius:8px;padding:10px;margin-top:8px">';
+      secContentHtml += '<div style="font-size:0.82rem;font-weight:700;color:#ff5252;margin-bottom:6px">\u26a0\ufe0f Area for Improvement: ' + obs.improvementObservation.title + '</div>';
+      secContentHtml += '<div style="font-size:0.76rem;color:var(--text-muted);line-height:1.5"><strong>Reference:</strong> ' + obs.improvementObservation.reference + '</div>';
+      secContentHtml += '<div style="font-size:0.76rem;color:var(--text-muted);line-height:1.5;margin-top:4px"><strong>Analysis:</strong> ' + obs.improvementObservation.analysis + '</div>';
+      secContentHtml += '<div style="font-size:0.76rem;color:var(--text-muted);line-height:1.5;margin-top:4px"><strong>Recommendation:</strong> ' + obs.improvementObservation.recommendation + '</div>';
+      secContentHtml += '</div>';
+    }
   }
   if (section.purpose) {
     secContentHtml = '<div style="font-size:0.8rem;color:#448aff;margin-bottom:8px;font-style:italic">' + section.purpose + '</div>' + secContentHtml;

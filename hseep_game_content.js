@@ -3093,6 +3093,55 @@ const HSEEP_TEMPLATES = {
     usedFor: ["Functional Exercise (FE)", "Full-Scale Exercise (FSE)", "Some Drills (complex ones)"],
     notUsedFor: ["Seminars", "Workshops", "Tabletop Exercises"],
     keyFact: "MSEL events must be tied to specific exercise objectives. Every inject should drive player actions that demonstrate performance against a SMART objective.",
+    sections: [
+      {
+        sectionNumber: 1,
+        title: "MSEL Column Structure",
+        purpose: "The MSEL is a chronological event list organized into 9 columns. Understanding each column's role is essential.",
+        fields: [
+          { field: "Event #", example: "MSEL-001", tip: "Sequential numbering" },
+          { field: "Time / Phase", example: "H+0:15 (15 minutes after StartEx)", tip: "Exact time or exercise phase when inject is delivered" },
+          { field: "Event Type", example: "Inject / Expected Action / Contingency Inject", tip: "Distinguish between the 3 types" },
+          { field: "Inject/Description", example: "SimCell calls EOC Director: 'This is Hospital A Emergency Operations. We are currently at 80% capacity...'", tip: "Full text of what the SimCell or Controller delivers to the player" },
+          { field: "Originator", example: "SimCell — Hospital A representative", tip: "Who delivers the inject" },
+          { field: "Target Player/Position", example: "EOC Director / Medical Branch Director", tip: "The specific player or position who receives the inject" },
+          { field: "Expected Player Action", example: "EOC Director activates patient surge protocol per EOP Annex H", tip: "What the player is expected to DO — this is what evaluators observe" },
+          { field: "Objective(s)", example: "Objective 2 — Medical Surge Coordination", tip: "Which exercise objective(s) this event tests" },
+          { field: "Notes", example: "If player does not activate surge protocol within 10 minutes, deliver Contingency Inject MSEL-001C", tip: "Contingency plans, special instructions, timing flexibility" }
+        ]
+      },
+      {
+        sectionNumber: 2,
+        title: "Event Types (3 Categories)",
+        purpose: "MSEL events fall into 3 distinct types. Understanding when and how to use each is critical.",
+        subsections: [
+          {
+            title: "Inject",
+            content: "A MSEL event introduced to a player by control staff representing non-playing entities, to build the exercise environment and drive play. Example: SimCell calls the EOC representing the State EOC requesting a situation report."
+          },
+          {
+            title: "Contingency Inject",
+            content: "A MSEL event introduced ONLY when a key player expected action did NOT occur as planned. Gives an additional opportunity to meet objectives. Example: If the EOC has not requested mutual aid by H+1:00, deliver: 'County Emergency Manager calling — have you considered requesting State mutual aid?'"
+          },
+          {
+            title: "Expected Action",
+            content: "A MSEL event representing an anticipated action to be taken by a player — what evaluators expect to see. Example: Within H+0:30, EOC Director should have issued initial Situation Report to State EOC."
+          }
+        ]
+      },
+      {
+        sectionNumber: 3,
+        title: "Sample MSEL Entries",
+        purpose: "Three real-world MSEL event examples demonstrating proper formatting and content.",
+        content: "<strong>MSEL-001</strong> (H+0:05, Inject)<br>SimCell (as 911 Dispatch): 'EOC, this is dispatch. We are receiving approximately 200 calls per minute regarding the chemical release. We have confirmed 47 patients at the scene, approximately 12 critical.'<br>→ <em>Expected Action:</em> EOC Operations Chief declares MCI; activates Mass Casualty Annex<br><br><strong>MSEL-001C</strong> (H+0:15, Contingency)<br>SimCell (as EMS Medical Director): 'EOC, I'm declaring this a Mass Casualty Incident — I need the EOC to formally acknowledge and activate the MCI response.'<br>→ <em>Deliver only if MSEL-001 expected action was NOT performed</em><br><br><strong>MSEL-002</strong> (H+0:20, Inject)<br>SimCell (as County PIO): 'EOC, I'm getting calls from 4 different TV stations. What is our public message right now?'<br>→ <em>Expected Action:</em> PIO drafts and releases initial public advisory within 15 minutes"
+      },
+      {
+        sectionNumber: 4,
+        title: "MSEL Development Principles",
+        purpose: "Key principles and tips for developing effective MSELs.",
+        content: "① Write MSEL events backward from objectives: what must players DO to demonstrate each objective? Those actions are the expected actions. What injects will DRIVE those actions? Those are the injects.<br><br>② Every objective should have 3–5 MSEL events supporting it<br><br>③ Always write contingency injects for critical expected actions — plan for players not doing what you expect<br><br>④ Time your injects realistically — don't flood players with 5 simultaneous events<br><br>⑤ Test the MSEL with a 'table read' before the exercise — walk through every inject<br><br>⑥ MSEL must be reviewed and approved at the MSEL Meeting and FPM"
+      }
+    ],
     columns: [
       { column: "Event #", description: "Sequential number (e.g., 001, 002)", example: "MSEL-001" },
       { column: "Time / Phase", description: "Exact time or exercise phase when inject is delivered", example: "H+0:15 (15 minutes after StartEx)" },
@@ -3280,7 +3329,7 @@ const HSEEP_TEMPLATES = {
     description: "The combined post-exercise document that analyzes exercise outcomes and prescribes corrective actions. The AAR documents strengths and areas for improvement; the IP translates areas for improvement into SMART corrective actions. Required for TTX, Drill, FE, and FSE. Must be completed typically within 90 days of the exercise.",
     keyFact: "The AAR/IP is confidential during the draft phase. It should not be released publicly until finalized through the After-Action Meeting (AAM) process.",
     deadline: "Typically within 90 days of exercise conduct",
-    aarSections: [
+    sections: [
       {
         sectionNumber: 1,
         title: "Cover / Title Page",
