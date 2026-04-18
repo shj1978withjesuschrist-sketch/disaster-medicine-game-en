@@ -310,6 +310,61 @@ const TRACKING_API = (() => {
   return 'http://localhost:8000';
 })();
 
+// ---- LOCAL DATA STORE ----
+const LocalStore = {
+  _key: 'disaster_med_sessions',
+  
+  getSessions() {
+    try { return JSON.parse(localStorage.getItem(this._key) || '[]'); }
+    catch(e) { return []; }
+  },
+  
+  saveSession(session) {
+    const sessions = this.getSessions();
+    sessions.push(session);
+    if (sessions.length > 500) sessions.splice(0, sessions.length - 500);
+    localStorage.setItem(this._key, JSON.stringify(sessions));
+  },
+  
+  getCurrentSession() {
+    try { return JSON.parse(sessionStorage.getItem('current_session') || 'null'); }
+    catch(e) { return null; }
+  },
+  
+  updateCurrentSession(data) {
+    const current = this.getCurrentSession() || { 
+      nickname: '', started_at: new Date().toISOString(), 
+      modes: [], answers: [], device: 'unknown' 
+    };
+    Object.assign(current, data);
+    sessionStorage.setItem('current_session', JSON.stringify(current));
+  },
+  
+  addAnswer(answer) {
+    const current = this.getCurrentSession();
+    if (!current) return;
+    if (!current.answers) current.answers = [];
+    current.answers.push(answer);
+    sessionStorage.setItem('current_session', JSON.stringify(current));
+  },
+  
+  addModeResult(result) {
+    const current = this.getCurrentSession();
+    if (!current) return;
+    if (!current.modes) current.modes = [];
+    current.modes.push(result);
+    sessionStorage.setItem('current_session', JSON.stringify(current));
+  },
+  
+  finishSession(summary) {
+    const current = this.getCurrentSession();
+    if (!current) return;
+    Object.assign(current, summary, { ended_at: new Date().toISOString() });
+    this.saveSession(current);
+    sessionStorage.removeItem('current_session');
+  }
+};
+
 const Tracker = {
   sessionId: null,
   modeStartTime: 0,
@@ -334,10 +389,13 @@ const Tracker = {
         this.sessionId = data.session_id;
       }
     } catch(e) { this.enabled = false; }
+    const deviceInfo2 = /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
+    LocalStore.updateCurrentSession({ nickname, started_at: new Date().toISOString(), device: deviceInfo2, modes: [], answers: [] });
   },
 
   async endSession(totalScore, maxLevel, maxStreak, modesCompleted) {
     if (!this.enabled || !this.sessionId) return;
+    LocalStore.finishSession({ total_score: totalScore, max_level: maxLevel, max_streak: maxStreak, modes_completed: [...modesCompleted] });
     try {
       await fetch(`${TRACKING_API}/api/session/end`, {
         method: 'POST',
@@ -370,6 +428,7 @@ const Tracker = {
     const timeTaken = Math.round((Date.now() - this.questionStartTime) / 1000);
     this.modeTotal++;
     if (isCorrect) this.modeCorrect++;
+    LocalStore.addAnswer({ mode: this.currentMode, question_id: String(questionId), selected: String(selectedAnswer), correct: isCorrect, time_sec: timeTaken, at: new Date().toISOString() });
     try {
       await fetch(`${TRACKING_API}/api/question/response`, {
         method: 'POST',
@@ -390,6 +449,7 @@ const Tracker = {
     if (!this.enabled || !this.sessionId) return;
     const timeSpent = Math.round((Date.now() - this.modeStartTime) / 1000);
     this.modeScore = score;
+    LocalStore.addModeResult({ mode: this.currentMode, score, correct: this.modeCorrect, total: this.modeTotal, time_sec: timeSpent, at: new Date().toISOString() });
     try {
       await fetch(`${TRACKING_API}/api/mode/result`, {
         method: 'POST',
@@ -996,31 +1056,366 @@ function renderIntro() {
   });
   enterBtn.addEventListener('click', startGame);
 
-  // Admin dashboard link — open as overlay iframe to inherit port proxy
+  // Admin dashboard — built-in, reads from localStorage
   $('admin-link-btn').addEventListener('click', () => {
     let overlay = document.getElementById('admin-overlay');
     if (overlay) { overlay.style.display = 'flex'; return; }
     overlay = document.createElement('div');
     overlay.id = 'admin-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.85);display:flex;flex-direction:column;align-items:center;padding:10px;';
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = '✕ Close';
-    closeBtn.style.cssText = 'align-self:flex-end;background:#e74c3c;color:#fff;border:none;padding:8px 18px;border-radius:8px;font-size:14px;cursor:pointer;margin-bottom:8px;font-weight:bold;';
-    closeBtn.addEventListener('click', () => { overlay.style.display = 'none'; });
-    const iframe = document.createElement('iframe');
-    const base = window.location.href.replace(/\/[^/]*$/, '/');
-    iframe.src = base + 'admin.html';
-    iframe.style.cssText = 'flex:1;width:100%;max-width:1200px;border:none;border-radius:12px;background:#1a1a2e;';
-    iframe.addEventListener('load', () => {
-      iframe.contentWindow.postMessage({type: 'SET_API_URL', url: TRACKING_API}, '*');
-    });
-    overlay.appendChild(closeBtn);
-    overlay.appendChild(iframe);
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#0f0f23;display:flex;flex-direction:column;font-family:system-ui,sans-serif;overflow:hidden;';
     document.body.appendChild(overlay);
+    renderAdminDashboard(overlay);
   });
 
   setTimeout(() => nickInput.focus(), 300);
   spawnParticles();
+}
+
+
+// ---- BUILT-IN ADMIN DASHBOARD ----
+const MODE_LABELS = {
+  triage: 'START Triage',
+  quiz: 'Medical Knowledge Quiz',
+  cbrne: 'CBRNE Response',
+  mci: 'Mass Casualty Incident',
+  decon: 'Decontamination',
+  communication: 'Communication',
+  hseep_tabletop: 'HSEEP Tabletop Exercise',
+  hseep_functional: 'HSEEP Functional Exercise',
+  hseep_fullscale: 'HSEEP Full-Scale Exercise',
+  boss: 'Final Boss Challenge',
+  scenario: 'Scenario Mode',
+  field: 'Field Operations'
+};
+
+function renderAdminDashboard(overlay) {
+  const ADMIN_PASSWORD = 'disaster2026!';
+  let loggedIn = false;
+  let activeTab = 'overview';
+  let sortCol = 'started_at';
+  let sortAsc = false;
+  let nickFilter = '';
+  let selectedSessionIdx = null;
+
+  const styles = `
+    <style>
+      #ad-root { height:100%; display:flex; flex-direction:column; background:#0f0f23; color:#e0e0e0; }
+      #ad-topbar { display:flex; align-items:center; justify-content:space-between; padding:10px 18px; background:#16213e; border-bottom:1px solid #1a1a3e; flex-shrink:0; }
+      #ad-topbar h1 { margin:0; font-size:18px; color:#7f8fff; font-weight:700; }
+      #ad-close { background:#e74c3c; color:#fff; border:none; padding:7px 16px; border-radius:7px; font-size:13px; cursor:pointer; font-weight:bold; }
+      #ad-login { display:flex; flex-direction:column; align-items:center; justify-content:center; flex:1; gap:18px; }
+      #ad-login h2 { color:#7f8fff; font-size:22px; margin:0; }
+      #ad-login input { padding:10px 16px; border-radius:8px; border:1px solid #333; background:#1a1a2e; color:#e0e0e0; font-size:15px; width:260px; outline:none; }
+      #ad-login button { padding:10px 32px; background:#7f8fff; color:#fff; border:none; border-radius:8px; font-size:15px; cursor:pointer; font-weight:bold; }
+      #ad-login .ad-err { color:#e74c3c; font-size:13px; display:none; }
+      #ad-tabs { display:flex; gap:4px; padding:10px 18px 0; background:#16213e; flex-shrink:0; }
+      #ad-tabs button { padding:8px 16px; border:none; border-radius:8px 8px 0 0; font-size:13px; cursor:pointer; background:#1a1a2e; color:#aaa; font-weight:600; }
+      #ad-tabs button.active { background:#0f0f23; color:#7f8fff; border-bottom:2px solid #7f8fff; }
+      #ad-body { flex:1; overflow-y:auto; padding:18px; }
+      .ad-card { background:#1a1a2e; border-radius:10px; padding:16px; margin-bottom:14px; border:1px solid #222255; }
+      .ad-card h3 { margin:0 0 10px 0; color:#7f8fff; font-size:14px; text-transform:uppercase; letter-spacing:1px; }
+      .ad-stat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; margin-bottom:14px; }
+      .ad-stat { background:#16213e; border-radius:8px; padding:12px 14px; text-align:center; }
+      .ad-stat .val { font-size:26px; font-weight:700; color:#7f8fff; }
+      .ad-stat .lbl { font-size:11px; color:#888; margin-top:2px; }
+      table { width:100%; border-collapse:collapse; font-size:13px; }
+      th { background:#16213e; color:#7f8fff; padding:8px 10px; text-align:left; cursor:pointer; user-select:none; font-weight:600; position:sticky; top:0; }
+      th:hover { background:#1a1a2e; }
+      td { padding:7px 10px; border-bottom:1px solid #1a1a2e; }
+      tr:nth-child(even) td { background:#161628; }
+      tr:hover td { background:#1c1c40; }
+      .ad-search { padding:8px 12px; border-radius:7px; border:1px solid #333; background:#1a1a2e; color:#e0e0e0; font-size:13px; width:220px; margin-bottom:10px; outline:none; }
+      .ad-export { padding:7px 16px; background:#2d6a4f; color:#fff; border:none; border-radius:7px; font-size:13px; cursor:pointer; font-weight:bold; margin-bottom:10px; margin-left:8px; }
+      .badge-ok { color:#2ecc71; font-weight:700; }
+      .badge-err { color:#e74c3c; font-weight:700; }
+      select.ad-sel { padding:7px 10px; border-radius:7px; border:1px solid #333; background:#1a1a2e; color:#e0e0e0; font-size:13px; width:100%; margin-bottom:10px; outline:none; }
+    </style>
+  `;
+
+  function getLabel(m) { return MODE_LABELS[m] || m; }
+
+  function buildOverview(sessions) {
+    if (!sessions.length) return '<div class="ad-card"><p style="color:#888">No session data found. Play the game first!</p></div>';
+    const total = sessions.length;
+    const nicks = new Set(sessions.map(s => s.nickname)).size;
+    const scores = sessions.filter(s => s.total_score != null).map(s => s.total_score);
+    const avgScore = scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : 0;
+    // most played mode
+    const modeCounts = {};
+    sessions.forEach(s => (s.modes||[]).forEach(m => { modeCounts[m.mode] = (modeCounts[m.mode]||0)+1; }));
+    const topMode = Object.entries(modeCounts).sort((a,b)=>b[1]-a[1])[0];
+    const mobile = sessions.filter(s=>s.device==='mobile').length;
+    const desktop = sessions.filter(s=>s.device==='desktop').length;
+    const recent = sessions.slice().sort((a,b)=>b.started_at?.localeCompare(a.started_at||'')||0).slice(0,10);
+    return `
+      <div class="ad-stat-grid">
+        <div class="ad-stat"><div class="val">${total}</div><div class="lbl">Total Sessions</div></div>
+        <div class="ad-stat"><div class="val">${nicks}</div><div class="lbl">Unique Nicknames</div></div>
+        <div class="ad-stat"><div class="val">${avgScore}</div><div class="lbl">Avg Score</div></div>
+        <div class="ad-stat"><div class="val">${topMode ? getLabel(topMode[0]) : '-'}</div><div class="lbl">Most Played Mode</div></div>
+        <div class="ad-stat"><div class="val">${mobile}</div><div class="lbl">Mobile</div></div>
+        <div class="ad-stat"><div class="val">${desktop}</div><div class="lbl">Desktop</div></div>
+      </div>
+      <div class="ad-card">
+        <h3>Recent 10 Sessions</h3>
+        <table>
+          <thead><tr><th>Nickname</th><th>Started</th><th>Score</th><th>Level</th><th>Device</th></tr></thead>
+          <tbody>
+            ${recent.map(s => `<tr>
+              <td>${s.nickname||'-'}</td>
+              <td>${s.started_at ? s.started_at.replace('T',' ').slice(0,19) : '-'}</td>
+              <td>${s.total_score??'-'}</td>
+              <td>${s.max_level??'-'}</td>
+              <td>${s.device||'-'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function buildStudents(sessions, filter, col, asc) {
+    let rows = sessions.slice();
+    if (filter) rows = rows.filter(s => (s.nickname||'').toLowerCase().includes(filter.toLowerCase()));
+    rows.sort((a,b) => {
+      let va = a[col] ?? ''; let vb = b[col] ?? '';
+      if (typeof va === 'number') return asc ? va-vb : vb-va;
+      return asc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+    });
+    const arrow = (c) => col===c ? (asc?'▲':'▼') : '';
+    return `
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+        <input class="ad-search" id="ad-nick-filter" placeholder="Filter by nickname..." value="${filter}">
+        <button class="ad-export" id="ad-export-btn">📥 Export CSV</button>
+      </div>
+      <div class="ad-card" style="padding:0;overflow:auto;">
+        <table>
+          <thead><tr>
+            <th data-col="nickname">Nickname ${arrow('nickname')}</th>
+            <th data-col="started_at">Time ${arrow('started_at')}</th>
+            <th data-col="total_score">Score ${arrow('total_score')}</th>
+            <th data-col="max_level">Level ${arrow('max_level')}</th>
+            <th data-col="max_streak">Streak ${arrow('max_streak')}</th>
+            <th>Modes</th>
+            <th data-col="device">Device ${arrow('device')}</th>
+          </tr></thead>
+          <tbody>
+            ${rows.map(s => `<tr>
+              <td>${s.nickname||'-'}</td>
+              <td>${s.started_at ? s.started_at.replace('T',' ').slice(0,19) : '-'}</td>
+              <td>${s.total_score??'-'}</td>
+              <td>${s.max_level??'-'}</td>
+              <td>${s.max_streak??'-'}</td>
+              <td>${(s.modes||[]).map(m=>getLabel(m.mode)).join(', ')||'-'}</td>
+              <td>${s.device||'-'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function buildModeAnalysis(sessions) {
+    const modeStats = {};
+    sessions.forEach(s => {
+      (s.modes||[]).forEach(m => {
+        if (!modeStats[m.mode]) modeStats[m.mode] = { count:0, scores:[], accs:[], times:[] };
+        const ms = modeStats[m.mode];
+        ms.count++;
+        if (m.score != null) ms.scores.push(m.score);
+        if (m.total > 0) ms.accs.push(m.correct / m.total * 100);
+        if (m.time_sec != null) ms.times.push(m.time_sec);
+      });
+    });
+    const avg = arr => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : '-';
+    const rows = Object.entries(modeStats).sort((a,b)=>b[1].count-a[1].count);
+    if (!rows.length) return '<div class="ad-card"><p style="color:#888">No mode data yet.</p></div>';
+    return `
+      <div class="ad-card" style="padding:0;overflow:auto;">
+        <table>
+          <thead><tr>
+            <th>Mode</th><th>Sessions</th><th>Avg Score</th><th>Avg Accuracy</th><th>Avg Time (s)</th>
+          </tr></thead>
+          <tbody>
+            ${rows.map(([mode, ms]) => `<tr>
+              <td>${getLabel(mode)}</td>
+              <td>${ms.count}</td>
+              <td>${avg(ms.scores)}</td>
+              <td>${ms.accs.length ? avg(ms.accs)+'%' : '-'}</td>
+              <td>${avg(ms.times)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function buildDetailedData(sessions, selIdx) {
+    const opts = sessions.map((s,i) => `<option value="${i}" ${selIdx===i?'selected':''}>${i+1}. ${s.nickname||'?'} — ${s.started_at ? s.started_at.replace('T',' ').slice(0,19) : '?'} (Score: ${s.total_score??'?'})</option>`).join('');
+    let answerTable = '<p style="color:#888">Select a session to see detailed answers.</p>';
+    if (selIdx !== null && sessions[selIdx]) {
+      const answers = sessions[selIdx].answers || [];
+      if (answers.length) {
+        answerTable = `
+          <div class="ad-card" style="padding:0;overflow:auto;margin-top:10px;">
+            <table>
+              <thead><tr><th>Mode</th><th>Question ID</th><th>Selected</th><th>Correct?</th><th>Time (s)</th><th>At</th></tr></thead>
+              <tbody>
+                ${answers.map(a => `<tr>
+                  <td>${getLabel(a.mode)}</td>
+                  <td>${a.question_id||'-'}</td>
+                  <td>${a.selected??'-'}</td>
+                  <td class="${a.correct?'badge-ok':'badge-err'}">${a.correct?'✓':'✗'}</td>
+                  <td>${a.time_sec??'-'}</td>
+                  <td>${a.at ? a.at.replace('T',' ').slice(0,19) : '-'}</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } else {
+        answerTable = '<p style="color:#888">No answer data for this session.</p>';
+      }
+    }
+    return `
+      <div class="ad-card">
+        <h3>Select Session</h3>
+        <select class="ad-sel" id="ad-session-sel">
+          <option value="">-- Select a session --</option>
+          ${opts}
+        </select>
+      </div>
+      ${answerTable}
+    `;
+  }
+
+  function exportCSV(sessions) {
+    const rows = [['Nickname','Started','Ended','Score','Level','Streak','Modes','Device']];
+    sessions.forEach(s => {
+      rows.push([
+        s.nickname||'',
+        s.started_at||'',
+        s.ended_at||'',
+        s.total_score??'',
+        s.max_level??'',
+        s.max_streak??'',
+        (s.modes||[]).map(m=>m.mode).join('|'),
+        s.device||''
+      ]);
+    });
+    const csv = rows.map(r => r.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'disaster_med_sessions.csv'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function renderDashboard() {
+    const sessions = LocalStore.getSessions();
+    let tabContent = '';
+    if (activeTab === 'overview') tabContent = buildOverview(sessions);
+    else if (activeTab === 'students') tabContent = buildStudents(sessions, nickFilter, sortCol, sortAsc);
+    else if (activeTab === 'modes') tabContent = buildModeAnalysis(sessions);
+    else if (activeTab === 'detail') tabContent = buildDetailedData(sessions, selectedSessionIdx);
+
+    overlay.innerHTML = styles + `
+      <div id="ad-root">
+        <div id="ad-topbar">
+          <h1>🏥 Disaster Medicine Admin Dashboard</h1>
+          <button id="ad-close">✕ Close</button>
+        </div>
+        <div id="ad-tabs">
+          <button class="${activeTab==='overview'?'active':''}" data-tab="overview">📊 Overview</button>
+          <button class="${activeTab==='students'?'active':''}" data-tab="students">👥 Students</button>
+          <button class="${activeTab==='modes'?'active':''}" data-tab="modes">📈 Mode Analysis</button>
+          <button class="${activeTab==='detail'?'active':''}" data-tab="detail">🔍 Detailed Data</button>
+        </div>
+        <div id="ad-body">${tabContent}</div>
+      </div>
+    `;
+
+    // Close button
+    overlay.querySelector('#ad-close').addEventListener('click', () => {
+      overlay.style.display = 'none';
+    });
+
+    // Tab switching
+    overlay.querySelectorAll('#ad-tabs button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeTab = btn.dataset.tab;
+        renderDashboard();
+      });
+    });
+
+    // Students tab events
+    if (activeTab === 'students') {
+      const filterInput = overlay.querySelector('#ad-nick-filter');
+      if (filterInput) {
+        filterInput.addEventListener('input', () => {
+          nickFilter = filterInput.value;
+          renderDashboard();
+        });
+      }
+      const exportBtn = overlay.querySelector('#ad-export-btn');
+      if (exportBtn) exportBtn.addEventListener('click', () => exportCSV(sessions));
+      overlay.querySelectorAll('th[data-col]').forEach(th => {
+        th.addEventListener('click', () => {
+          const col = th.dataset.col;
+          if (sortCol === col) sortAsc = !sortAsc;
+          else { sortCol = col; sortAsc = true; }
+          renderDashboard();
+        });
+      });
+    }
+
+    // Detail tab events
+    if (activeTab === 'detail') {
+      const sel = overlay.querySelector('#ad-session-sel');
+      if (sel) {
+        sel.addEventListener('change', () => {
+          selectedSessionIdx = sel.value !== '' ? parseInt(sel.value) : null;
+          renderDashboard();
+        });
+      }
+    }
+  }
+
+  // Show login screen first
+  overlay.innerHTML = styles + `
+    <div id="ad-root">
+      <div id="ad-topbar">
+        <h1>🏥 Disaster Medicine Admin Dashboard</h1>
+        <button id="ad-close">✕ Close</button>
+      </div>
+      <div id="ad-login">
+        <h2>🔐 Admin Login</h2>
+        <input type="password" id="ad-pw" placeholder="Enter admin password" autocomplete="off">
+        <button id="ad-login-btn">Login</button>
+        <div class="ad-err" id="ad-err">Incorrect password. Try again.</div>
+      </div>
+    </div>
+  `;
+
+  overlay.querySelector('#ad-close').addEventListener('click', () => {
+    overlay.style.display = 'none';
+  });
+
+  const tryLogin = () => {
+    const pw = overlay.querySelector('#ad-pw').value;
+    if (pw === ADMIN_PASSWORD) {
+      loggedIn = true;
+      renderDashboard();
+    } else {
+      const errEl = overlay.querySelector('#ad-err');
+      if (errEl) errEl.style.display = 'block';
+    }
+  };
+
+  overlay.querySelector('#ad-login-btn').addEventListener('click', tryLogin);
+  overlay.querySelector('#ad-pw').addEventListener('keydown', e => {
+    if (e.key === 'Enter') tryLogin();
+  });
 }
 
 function startGame() {
