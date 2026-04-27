@@ -1881,6 +1881,10 @@ function enterMode(mode) {
       perStepCorrect: {}
     };
     G.cbxBriefingMs = Date.now() + driftMs; // simulated comms-drift baseline
+    // Per-session randomized copy of the drill steps with shuffled options.
+    G.cbxSteps = (typeof buildRandomizedCrossBorderSteps === 'function')
+      ? buildRandomizedCrossBorderSteps()
+      : content.steps.map(s => ({ ...s }));
   }
   Tracker.startQuestion();
   render();
@@ -7299,10 +7303,14 @@ function renderHSEEPCampaignResult() {
 function renderCrossBorderCbrne() {
   const content = window.CROSS_BORDER_CBRNE;
   if (!content) { app.innerHTML = '<div class="screen"><p>Cross-Border CBRNe content failed to load.</p><button class="btn-outline" onclick="G.screen=\'modes\';render();">← Back</button></div>'; return; }
-  const step = content.steps[G.cbxStepIdx];
+  // Use the per-session randomized step set (built in enterMode). Fall back to
+  // the source content only as a defensive default; correctness is carried on
+  // each option, so either is safe.
+  const steps = (Array.isArray(G.cbxSteps) && G.cbxSteps.length) ? G.cbxSteps : content.steps;
+  const step = steps[G.cbxStepIdx];
   if (!step) { finishCrossBorderCbrne(); return; }
 
-  const totalSteps = content.steps.length;
+  const totalSteps = steps.length;
   const progressPct = Math.round((G.cbxStepIdx / totalSteps) * 100);
 
   const rolesHtml = content.roles.map(r => {
@@ -7356,10 +7364,11 @@ function renderCrossBorderCbrne() {
   } else if (step.kind === 'mcq') {
     const patientHtml = step.patient ? `<div class="cbx-patient"><span class="cbx-pin">🧑‍⚕️ Patient</span> ${step.patient}</div>` : '';
     const optsHtml = step.options.map((opt, i) => {
+      const isCorrect = !!(opt.isCorrect || opt.correct);
       let cls = 'cbx-opt';
       if (G.cbxAnswered) {
-        if (opt.correct) cls += ' correct';
-        if (G.cbxSelected === i && !opt.correct) cls += ' wrong';
+        if (isCorrect) cls += ' correct';
+        if (G.cbxSelected === i && !isCorrect) cls += ' wrong';
       }
       const dis = G.cbxAnswered ? 'disabled' : '';
       return `<button class="${cls}" ${dis} onclick="answerCrossBorderCbrne(${i})">
@@ -7403,11 +7412,14 @@ function renderCrossBorderCbrne() {
 function answerCrossBorderCbrne(idx) {
   if (G.cbxAnswered) return;
   const content = window.CROSS_BORDER_CBRNE;
-  const step = content.steps[G.cbxStepIdx];
+  const steps = (Array.isArray(G.cbxSteps) && G.cbxSteps.length) ? G.cbxSteps : content.steps;
+  const step = steps[G.cbxStepIdx];
   if (!step || step.kind !== 'mcq') return;
 
   const opt = step.options[idx];
-  const correct = !!opt.correct;
+  // Score by option identity, not array position. Options are shuffled per
+  // session, so the index is just a display position.
+  const correct = !!(opt.isCorrect || opt.correct);
   G.cbxAnswered = true;
   G.cbxSelected = idx;
 
@@ -7417,6 +7429,8 @@ function answerCrossBorderCbrne(idx) {
     stepId: step.id,
     role: step.role,
     selected: idx,
+    selectedOptionId: opt.id || null,
+    selectedOptionLabel: opt.text || null,
     correct,
     elapsedSec,
     at: new Date().toISOString()
@@ -7429,7 +7443,7 @@ function answerCrossBorderCbrne(idx) {
   if (step.id === 'allocation' && !correct) G.cbxMetrics.contaminatedTransportErrors += 1;
   if (step.id === 'degraded' && correct) G.cbxMetrics.degradedRecoverySec = elapsedSec;
 
-  Tracker.recordAnswer(`crossBorderCbrne_${step.id}`, String(idx), correct);
+  Tracker.recordAnswer(`crossBorderCbrne_${step.id}`, opt.id || String(idx), correct);
 
   if (correct) {
     sfx('correct');
@@ -7455,7 +7469,8 @@ function advanceCrossBorderCbrne(fromBriefing) {
   G.cbxSelected = null;
   Tracker.startQuestion();
   const content = window.CROSS_BORDER_CBRNE;
-  if (G.cbxStepIdx >= content.steps.length) {
+  const steps = (Array.isArray(G.cbxSteps) && G.cbxSteps.length) ? G.cbxSteps : content.steps;
+  if (G.cbxStepIdx >= steps.length) {
     finishCrossBorderCbrne();
     return;
   }
@@ -7465,7 +7480,8 @@ function advanceCrossBorderCbrne(fromBriefing) {
 function finishCrossBorderCbrne() {
   G.modesCompleted.add('crossBorderCbrne');
   const content = window.CROSS_BORDER_CBRNE;
-  const mcqSteps = content.steps.filter(s => s.kind === 'mcq');
+  const steps = (Array.isArray(G.cbxSteps) && G.cbxSteps.length) ? G.cbxSteps : content.steps;
+  const mcqSteps = steps.filter(s => s.kind === 'mcq');
   const total = mcqSteps.length;
   const pct = total > 0 ? Math.round((G.cbxCorrectCount / total) * 100) : 0;
   if (pct === 100 && total > 0) G.perfectModes++;
