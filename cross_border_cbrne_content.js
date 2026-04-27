@@ -65,18 +65,20 @@ const CROSS_BORDER_CBRNE = {
       id: 'briefing',
       kind: 'briefing',
       role: 'all',
+      phase: 'Orientation',
       title: 'Incident Briefing & Role Dashboard',
-      prompt: 'Review the incident, the role panels, and the cross-border information flow before entering the drill.',
+      prompt: 'Review the incident, the role panels, and the cross-border information flow before entering the drill. The drill moves from clinical recognition (triage, decon, antidote) to coordination (semantics, comms) to cross-border allocation, and ends at the after-action review.',
       acknowledge: 'Acknowledge briefing'
     },
     {
       id: 'triage',
       kind: 'mcq',
       role: 'field',
+      phase: 'Clinical recognition',
       metric: 'triageAccuracy',
       title: 'MASS/START Triage Decision',
-      patient: 'Adult passenger on the platform: exposed to aerosol, dyspneic, altered mentation, unable to ambulate, suspected cyanide inhalation.',
-      prompt: 'Assign the correct MASS/START category for this patient.',
+      patient: 'Adult passenger collapsed on the platform shortly after an aerosol release. Findings: dyspnea, altered mentation, unable to ambulate, no external trauma. Hot-zone toxidrome consistent with inhalational cyanide exposure.',
+      prompt: 'Using MASS/START criteria, assign this patient to a triage category.',
       correctOptionId: 'red_immediate',
       options: [
         { id: 'red_immediate', text: 'Red / Immediate', isCorrect: true, why: 'Dyspnea + altered mentation + inability to ambulate + suspected cyanide inhalation map to Red/Immediate. Patient is time-critical and antidote-eligible.' },
@@ -89,9 +91,11 @@ const CROSS_BORDER_CBRNE = {
       id: 'predecon',
       kind: 'mcq',
       role: 'field',
+      phase: 'Clinical recognition',
       metric: 'preDecon',
       title: 'Pre-Decontamination Priority',
-      prompt: 'Critical patient at the warm-zone boundary, apneic with toxidrome. What is the correct pre-decontamination priority?',
+      patient: 'Same patient now at the warm-zone boundary: agonal breathing, GCS dropping, suspected cyanide toxidrome. Wet decontamination is staged but not yet started.',
+      prompt: 'What is the correct pre-decontamination priority for this casualty?',
       correctOptionId: 'priority_0',
       options: [
         { id: 'priority_0', text: 'Priority 0 — life-saving intervention first', isCorrect: true, why: 'For inhalational cyanide with imminent arrest, life-saving intervention (airway, antidote) precedes routine wet decon. Decon proceeds in parallel where safe.' },
@@ -104,9 +108,11 @@ const CROSS_BORDER_CBRNE = {
       id: 'antidote',
       kind: 'mcq',
       role: 'commander',
+      phase: 'Clinical recognition',
       metric: 'antidote',
       title: 'Cyanide Antidote Decision',
-      prompt: 'Confirmed cyanide toxidrome. Which antidote do you push?',
+      patient: 'Casualty in the cold zone after aerosol exposure: lactate markedly elevated, hypotension refractory to fluids, altered mentation, near-normal SpO₂ on high-flow O₂. Lab and clinical picture are diagnostic of an inhalational cyanide toxidrome.',
+      prompt: 'Which antidote do you authorise for immediate administration to this patient?',
       correctOptionId: 'hydroxocobalamin',
       options: [
         { id: 'hydroxocobalamin', text: 'Hydroxocobalamin', isCorrect: true, why: 'Hydroxocobalamin (Cyanokit) is the preferred cyanide antidote — it binds CN⁻ to form cyanocobalamin (B12a), excreted renally.' },
@@ -119,14 +125,15 @@ const CROSS_BORDER_CBRNE = {
       id: 'semantics',
       kind: 'mcq',
       role: 'semantics',
+      phase: 'Coordination',
       metric: 'semantics',
       title: 'Cross-Border Semantic Mapping',
-      prompt: 'Inbound EU-side handover labels the patient as "Critical". Korean DMAT/START dashboard expects Red/Immediate. What do you do?',
+      prompt: 'A handover from the EU-side EMS labels an inbound patient as "Critical". The shared Korean DMAT/START dashboard uses Red / Immediate, Yellow / Delayed, Green / Minor and Black / Expectant. How do you enter this patient on the shared dashboard?',
       correctOptionId: 'semantic_mapping_confirmed',
       options: [
-        { id: 'semantic_mapping_confirmed', text: 'Map to Red/Immediate, keep source label, flag mismatch', isCorrect: true, why: 'Preserves provenance, makes the entry actionable on the shared COP, and warns command that the mapping is operational rather than lexical (no direct 1:1 equivalent). Semantic + governance issues often matter as much as technology.' },
-        { id: 'drop_source_label', text: 'Drop "Critical", show only Red/Immediate', isCorrect: false, why: 'Loses provenance and audit trail; receiving clinicians cannot reconcile back to source.' },
-        { id: 'forward_verbatim', text: 'Forward "Critical" verbatim, no mapping', isCorrect: false, why: 'Fails the shared COP. Korean responders may not treat "Critical" as Red/Immediate priority on their dashboard.' },
+        { id: 'semantic_mapping_confirmed', text: 'Map to Red/Immediate, keep source term, flag non-equivalence', isCorrect: true, why: 'Preserves provenance and makes the entry actionable on the shared COP, while warning command that the mapping is operational rather than lexical (no direct 1:1 equivalent). Semantic and governance issues often matter as much as the technology layer.' },
+        { id: 'drop_source_label', text: 'Replace with Red/Immediate, drop the source term', isCorrect: false, why: 'Loses provenance and audit trail; receiving clinicians cannot reconcile the entry back to the EU source.' },
+        { id: 'forward_verbatim', text: 'Forward "Critical" verbatim, do not remap it', isCorrect: false, why: 'Fails the shared COP. Korean responders may not treat "Critical" as Red/Immediate priority on their dashboard.' },
         { id: 'downtriage_by_capacity', text: 'Down-triage to Yellow/Delayed for bed capacity', isCorrect: false, why: 'Triage must reflect clinical urgency, not bed availability. Down-triage by capacity is a governance failure.' }
       ]
     },
@@ -134,9 +141,10 @@ const CROSS_BORDER_CBRNE = {
       id: 'degraded',
       kind: 'mcq',
       role: 'dispatch',
+      phase: 'Coordination',
       metric: 'degraded',
       title: 'Degraded-Network Inject',
-      prompt: 'Hospital-capacity dashboard shows 6-minute latency, a duplicate inbound message, and one apparent message loss on the radio. What is the correct response?',
+      prompt: 'Mid-drill inject: the hospital-capacity dashboard refresh has fallen behind by ~6 minutes, one inbound radio message has arrived twice, and another seems to have been lost. Allocations are still required. What is the correct response?',
       correctOptionId: 'timestamp_ack_radio',
       options: [
         { id: 'timestamp_ack_radio', text: 'Timestamp, ack uncertainty, fall back to radio', isCorrect: true, why: 'Maintains a common operating picture under degraded comms. Timestamping + uncertainty flags + role-filtered updates protect decision quality, and radio fallback restores throughput.' },
@@ -149,15 +157,16 @@ const CROSS_BORDER_CBRNE = {
       id: 'allocation',
       kind: 'mcq',
       role: 'hospital',
+      phase: 'Cross-border allocation',
       metric: 'contaminatedTransport',
       title: 'Cross-Border Hospital Allocation',
-      prompt: 'A non-decontaminated Red/Immediate patient is ready to move. What do you do?',
+      prompt: 'A Red / Immediate patient who has not yet been decontaminated is loaded for transport. The receiving facility is across the border. Capacity has not yet been confirmed. What do you do?',
       correctOptionId: 'decon_then_alert',
       options: [
         { id: 'decon_then_alert', text: 'Decon at warm zone, pre-alert receiving ED', isCorrect: true, why: 'Avoids hospital contamination. Receiver alerting and capacity confirmation are mandatory before transport; decon may proceed in transit only where doctrine allows.' },
         { id: 'transport_no_decon', text: 'Transport now, skip decontamination', isCorrect: false, why: 'Contaminates the receiving ED, forces lockdown, and creates secondary casualties.' },
         { id: 'hold_until_full_decon', text: 'Hold on scene for full wet decon', isCorrect: false, why: 'Ignores life-saving priority for an unstable patient; causes preventable death.' },
-        { id: 'crossborder_no_alert', text: 'Send across border, no notification', isCorrect: false, why: 'Cross-border allocation requires explicit receiver alert and capacity confirmation.' }
+        { id: 'crossborder_no_alert', text: 'Move now, notify the receiver after handover', isCorrect: false, why: 'Cross-border allocation requires receiver alert and capacity confirmation BEFORE transport. Post-handover notification leaves the receiving ED unable to prepare decon, isolation or surge bed.' }
       ]
     }
   ],

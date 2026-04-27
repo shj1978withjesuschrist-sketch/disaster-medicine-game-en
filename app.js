@@ -7380,9 +7380,10 @@ function renderCrossBorderCbrne() {
     const nextBtn = G.cbxAnswered
       ? `<button class="btn-primary cbx-next" onclick="advanceCrossBorderCbrne(false)">Next decision →</button>`
       : '';
+    const phaseTag = step.phase ? `<span class="cbx-phase">${step.phase}</span>` : '';
     bodyHtml = `
       <div class="cbx-step-card">
-        <div class="cbx-step-meta">Decision ${G.cbxStepIdx} / ${totalSteps - 1}</div>
+        <div class="cbx-step-meta">Decision ${G.cbxStepIdx} / ${totalSteps - 1} ${phaseTag}</div>
         <h3>${step.title}</h3>
         ${patientHtml}
         <p class="cbx-prompt">${step.prompt}</p>
@@ -7524,12 +7525,22 @@ function renderCrossBorderCbrneAAR() {
   if (semanticsOk) strengths.push('Cross-border semantic mapping handled with provenance and flag'); else improvements.push('Preserve source label, map to shared dashboard, and flag non-equivalence');
   if ((m.contaminatedTransportErrors || 0) === 0) strengths.push('Zero preventable contaminated transports'); else improvements.push('Avoid transport of non-decontaminated casualties without receiver alert');
 
-  const recs = [
-    'Drill bilingual handover scripts and semantic flags before any joint exercise',
-    'Run a degraded-network inject in every functional drill — not just a happy-path COP',
-    'Pre-stage Hydroxocobalamin and rehearse pre-decon Priority 0 algorithm at hub stations',
-    'Build receiver-alert + capacity-confirm into the standing cross-border SOP'
-  ];
+  const degradedOk = !!perStep.degraded;
+  const allocationOk = !!perStep.contaminatedTransport;
+  const triageLatencyMissed = m.triageDashboardLatencySec != null && m.triageDashboardLatencySec > targets.triageDashboardLatencySec;
+  const handoverMissed = m.handoverDelaySec != null && m.handoverDelaySec > targets.handoverDelaySec;
+  const degradedRecMissed = m.degradedRecoverySec != null && m.degradedRecoverySec > targets.degradedRecoverySec;
+
+  const recs = [];
+  if (!semanticsOk) recs.push('Pre-publish a bilingual EU↔KOR triage-term mapping table on the shared COP and rehearse it during quarterly handover drills');
+  if (!degradedOk || degradedRecMissed) recs.push('Inject a degraded-network event in every functional drill (≥6 min latency, duplicate / lost messages) and require timestamp + uncertainty flags + radio fallback');
+  if (!antidoteOk || !preDeconOk) recs.push('Pre-stage Hydroxocobalamin (Cyanokit) at transport hubs and rehearse the Priority-0 pre-decon algorithm with hot-zone teams');
+  if (!allocationOk) recs.push('Codify a receiver-alert + capacity-confirm-before-transport check into the standing cross-border SOP, with a written cross-border notification SLA');
+  if (triageLatencyMissed) recs.push(`Reduce triage→dashboard latency: target ≤${targets.triageDashboardLatencySec}s. Use one-tap dashboard entry from field tablets and pre-printed Red/Immediate stickers`);
+  if (handoverMissed) recs.push(`Reduce hospital handover delay: target ≤${targets.handoverDelaySec}s. Standardise a 5-line cross-border handover script (ID, agent, decon status, triage, ETA)`);
+  if (recs.length === 0) {
+    recs.push('Maintain the current playbook: bilingual semantic mapping, degraded-network injects, pre-staged Hydroxocobalamin and pre-transport receiver alerts are all on target. Schedule a quarterly re-drill to prevent decay.');
+  }
 
   const timelineHtml = log.map((l, i) => {
     const stepDef = content.steps.find(s => s.id === l.stepId);

@@ -1,0 +1,125 @@
+// Structural validation + randomization tests for Cross-Border CBRNe Drill.
+// Run: node test_cross_border_cbrne.js
+const fs = require('fs');
+const path = require('path');
+const m = require('./cross_border_cbrne_content.js');
+
+let passed = 0, failed = 0;
+function assert(cond, msg) {
+  if (cond) { passed++; }
+  else { failed++; console.error('FAIL:', msg); }
+}
+
+const C = m.CROSS_BORDER_CBRNE;
+
+// 1. Mode metadata
+assert(C.modeKey === 'crossBorderCbrne', 'modeKey is crossBorderCbrne');
+assert(C.modeTitle === 'Cross-Border CBRNe Drill', 'modeTitle is exactly "Cross-Border CBRNe Drill"');
+
+// 2. No user-facing ISCRAM in any string field of the content
+const stringy = JSON.stringify(C);
+assert(!/iscram/i.test(stringy), 'No ISCRAM token anywhere in content');
+
+// 3. Step structure: briefing first, then mcq steps
+assert(C.steps[0].kind === 'briefing', 'First step is briefing');
+const mcq = C.steps.filter(s => s.kind === 'mcq');
+assert(mcq.length === 6, 'Six MCQ decision steps');
+
+// Expected order matches spec
+const expectedOrder = ['briefing','triage','predecon','antidote','semantics','degraded','allocation'];
+assert(JSON.stringify(C.steps.map(s=>s.id)) === JSON.stringify(expectedOrder),
+  'Step order matches: ' + expectedOrder.join(' → '));
+
+// 4. Each MCQ step: exactly one correct, IDs unique, correctOptionId resolves, balanced length
+for (const s of mcq) {
+  const correct = s.options.filter(o => o.isCorrect);
+  assert(correct.length === 1, `${s.id}: exactly one correct option`);
+  const ids = s.options.map(o => o.id);
+  assert(new Set(ids).size === ids.length, `${s.id}: option IDs unique`);
+  assert(s.correctOptionId && ids.includes(s.correctOptionId), `${s.id}: correctOptionId resolves to a real option`);
+  assert(correct[0].id === s.correctOptionId, `${s.id}: isCorrect option matches correctOptionId`);
+
+  // Length balance: correct option ≤ 1.6× shortest distractor and ≤ 70 chars
+  const distLens = s.options.filter(o => !o.isCorrect).map(o => o.text.length);
+  const cLen = correct[0].text.length;
+  const minDist = Math.min(...distLens);
+  assert(cLen <= 70, `${s.id}: correct option length ≤ 70 (got ${cLen})`);
+  assert(cLen / minDist <= 1.6, `${s.id}: correct option not >1.6× shortest distractor (ratio ${(cLen/minDist).toFixed(2)})`);
+
+  // Each option carries non-empty `why` for feedback
+  for (const o of s.options) {
+    assert(typeof o.why === 'string' && o.why.length > 20, `${s.id}/${o.id}: has substantive why (>20 chars)`);
+  }
+}
+
+// 5. AAR targets present and match spec values
+assert(C.aarTargets.triageDashboardLatencySec === 90, 'AAR target: triage→dashboard latency = 90s');
+assert(C.aarTargets.handoverDelaySec === 180, 'AAR target: handover delay = 180s');
+assert(C.aarTargets.contaminatedTransportErrors === 0, 'AAR target: contaminated transport errors = 0');
+assert(C.aarTargets.degradedRecoverySec === 120, 'AAR target: degraded-network recovery = 120s');
+
+// 6. Randomization: 50 simulated builds. Confirm options are shuffled and that
+//    scoring by option identity stays correct regardless of display order.
+const orderingsPerStep = {};
+for (const s of mcq) orderingsPerStep[s.id] = new Set();
+let scoreOk = true;
+for (let run = 0; run < 50; run++) {
+  const built = m.buildRandomizedCrossBorderSteps();
+  for (const s of built) {
+    if (s.kind !== 'mcq') continue;
+    const order = s.options.map(o => o.id).join('|');
+    orderingsPerStep[s.id].add(order);
+
+    // simulate "always pick correct by ID" — must still score correct
+    const picked = s.options.find(o => o.id === s.correctOptionId);
+    if (!picked || !picked.isCorrect) scoreOk = false;
+  }
+}
+assert(scoreOk, 'Identity-based scoring (correctOptionId) stays correct across 50 randomized runs');
+let stepsWithVariation = 0;
+for (const s of mcq) {
+  if (orderingsPerStep[s.id].size > 1) stepsWithVariation++;
+}
+assert(stepsWithVariation >= mcq.length - 1,
+  `At least n-1 steps show option-order variation across 50 runs (got ${stepsWithVariation}/${mcq.length})`);
+
+// 7. Fisher-Yates shuffle preserves the multiset of elements
+{
+  const src = ['a','b','c','d','e'];
+  const out = m.cbxShuffleInPlace(src.slice());
+  assert(out.length === src.length && [...out].sort().join() === [...src].sort().join(),
+    'Fisher-Yates is a valid permutation');
+}
+
+// 8. App.js wiring sanity (string presence) — exact mode name and no ISCRAM
+const appSrc = fs.readFileSync(path.join(__dirname, 'app.js'), 'utf8');
+assert(appSrc.includes("'Cross-Border CBRNe Drill'") || appSrc.includes('"Cross-Border CBRNe Drill"') || appSrc.includes('Cross-Border CBRNe Drill'),
+  'app.js references exact mode name "Cross-Border CBRNe Drill"');
+assert(!/iscram/i.test(appSrc), 'No ISCRAM token in app.js');
+
+// 9. Smoke test: simulate a full run answering correctly via option.isCorrect
+{
+  const steps = m.buildRandomizedCrossBorderSteps();
+  let correctCount = 0;
+  for (const s of steps) {
+    if (s.kind !== 'mcq') continue;
+    const picked = s.options.find(o => o.isCorrect);
+    if (picked) correctCount++;
+  }
+  assert(correctCount === mcq.length, `Smoke run: ${mcq.length}/${mcq.length} correct via isCorrect`);
+}
+
+// 10. Smoke test: simulate a full run answering wrong
+{
+  const steps = m.buildRandomizedCrossBorderSteps();
+  let wrongCount = 0;
+  for (const s of steps) {
+    if (s.kind !== 'mcq') continue;
+    const picked = s.options.find(o => !o.isCorrect);
+    if (picked && !picked.isCorrect) wrongCount++;
+  }
+  assert(wrongCount === mcq.length, `Smoke run (wrong path): all ${mcq.length} steps score wrong correctly`);
+}
+
+console.log(`\nResults: ${passed} passed, ${failed} failed`);
+process.exit(failed > 0 ? 1 : 0);
