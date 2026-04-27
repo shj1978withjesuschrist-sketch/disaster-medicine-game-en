@@ -446,14 +446,18 @@ const Tracker = {
     this.questionStartTime = Date.now();
   },
 
-  async recordAnswer(questionId, selectedAnswer, isCorrect) {
+  async recordAnswer(questionId, selectedAnswer, isCorrect, extras) {
     if (!this.enabled || !this.sessionId) return;
     const timeTaken = Math.round((Date.now() - this.questionStartTime) / 1000);
     this.modeTotal++;
     if (isCorrect) this.modeCorrect++;
-    LocalStore.addAnswer({ mode: this.currentMode, question_id: String(questionId), selected: String(selectedAnswer), correct: isCorrect, time_sec: timeTaken, at: new Date().toISOString() });
+    const localEntry = { mode: this.currentMode, question_id: String(questionId), selected: String(selectedAnswer), correct: isCorrect, time_sec: timeTaken, at: new Date().toISOString() };
+    if (extras && typeof extras === 'object') localEntry.extras = extras;
+    LocalStore.addAnswer(localEntry);
     if (window.FirebaseSync && FirebaseSync.isReady()) {
-      FirebaseSync.pushAnswer(this.sessionId, { mode: this.currentMode, question_id: String(questionId), selected: String(selectedAnswer), correct: isCorrect, time_sec: timeTaken });
+      const fbAnswer = { mode: this.currentMode, question_id: String(questionId), selected: String(selectedAnswer), correct: isCorrect, time_sec: timeTaken };
+      if (extras && typeof extras === 'object') fbAnswer.extras = extras;
+      FirebaseSync.pushAnswer(this.sessionId, fbAnswer);
       FirebaseSync.pushSessionUpdate({ sessionId: this.sessionId, nickname: G.nickname, team: G.team||'', total_score: G.score, max_level: G.level, max_streak: G.maxStreak, modes_completed: [...G.modesCompleted], current_mode: this.currentMode, current_progress: {correct: this.modeCorrect, total: this.modeTotal}, device: /Mobi|Android/i.test(navigator.userAgent)?'mobile':'desktop', started_at: '' });
     }
     try {
@@ -472,26 +476,35 @@ const Tracker = {
     } catch(e) {}
   },
 
-  async endMode(score) {
+  async endMode(score, details) {
     if (!this.enabled || !this.sessionId) return;
     const timeSpent = Math.round((Date.now() - this.modeStartTime) / 1000);
     this.modeScore = score;
-    LocalStore.addModeResult({ mode: this.currentMode, score, correct: this.modeCorrect, total: this.modeTotal, time_sec: timeSpent, at: new Date().toISOString() });
+    const localResult = { mode: this.currentMode, score, correct: this.modeCorrect, total: this.modeTotal, time_sec: timeSpent, at: new Date().toISOString() };
+    if (details && typeof details === 'object') localResult.details = details;
+    LocalStore.addModeResult(localResult);
     if (window.FirebaseSync && FirebaseSync.isReady()) {
-      FirebaseSync.pushModeResult(this.sessionId, { mode: this.currentMode, score, correct: this.modeCorrect, total: this.modeTotal, time_sec: timeSpent });
+      const fbResult = { mode: this.currentMode, score, correct: this.modeCorrect, total: this.modeTotal, time_sec: timeSpent };
+      if (details && typeof details === 'object') fbResult.details = details;
+      FirebaseSync.pushModeResult(this.sessionId, fbResult);
     }
     try {
+      const body = {
+        session_id: this.sessionId,
+        mode: this.currentMode,
+        score: score,
+        total_questions: this.modeTotal,
+        correct_answers: this.modeCorrect,
+        time_spent_sec: timeSpent
+      };
+      if (details && typeof details === 'object') {
+        // Backend `details` column is TEXT — stringify the structured payload.
+        try { body.details = JSON.stringify(details); } catch(e) {}
+      }
       await fetch(`${TRACKING_API}/api/mode/result`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          session_id: this.sessionId,
-          mode: this.currentMode,
-          score: score,
-          total_questions: this.modeTotal,
-          correct_answers: this.modeCorrect,
-          time_spent_sec: timeSpent
-        })
+        body: JSON.stringify(body)
       });
     } catch(e) {}
   }
@@ -7426,14 +7439,29 @@ function answerCrossBorderCbrne(idx) {
 
   const tNow = Date.now();
   const elapsedSec = Math.max(0, Math.round((tNow - (G.cbxBriefingMs || tNow)) / 1000));
+  // Per-question response time uses Tracker.questionStartTime so it is
+  // independent of the cumulative drill clock.
+  const responseTimeSec = Math.max(0, Math.round((tNow - (Tracker.questionStartTime || tNow)) / 1000));
+  const displayedOptionOrder = Array.isArray(step.displayedOptionOrder) && step.displayedOptionOrder.length
+    ? step.displayedOptionOrder.slice()
+    : step.options.map(o => o.id);
   G.cbxAnswerLog.push({
+    stepIndex: typeof step.stepIndex === 'number' ? step.stepIndex : G.cbxStepIdx,
     stepId: step.id,
+    construct: step.construct || step.metric || null,
+    phase: step.phase || null,
     role: step.role,
-    selected: idx,
+    promptLabel: step.title || null,
+    correctOptionId: step.correctOptionId || null,
+    selectedDisplayIndex: idx,
     selectedOptionId: opt.id || null,
     selectedOptionLabel: opt.text || null,
-    correct,
+    displayedOptionOrder,
+    isCorrect: correct,
+    correct, // back-compat
+    selected: idx, // back-compat
     elapsedSec,
+    responseTimeSec,
     at: new Date().toISOString()
   });
   if (step.metric) G.cbxMetrics.perStepCorrect[step.metric] = correct;
@@ -7444,7 +7472,21 @@ function answerCrossBorderCbrne(idx) {
   if (step.id === 'allocation' && !correct) G.cbxMetrics.contaminatedTransportErrors += 1;
   if (step.id === 'degraded' && correct) G.cbxMetrics.degradedRecoverySec = elapsedSec;
 
-  Tracker.recordAnswer(`crossBorderCbrne_${step.id}`, opt.id || String(idx), correct);
+  Tracker.recordAnswer(`crossBorderCbrne_${step.id}`, opt.id || String(idx), correct, {
+    stepIndex: typeof step.stepIndex === 'number' ? step.stepIndex : G.cbxStepIdx,
+    stepId: step.id,
+    construct: step.construct || step.metric || null,
+    phase: step.phase || null,
+    role: step.role || null,
+    promptLabel: step.title || null,
+    correctOptionId: step.correctOptionId || null,
+    selectedOptionId: opt.id || null,
+    selectedOptionLabel: opt.text || null,
+    selectedDisplayIndex: idx,
+    displayedOptionOrder,
+    isCorrect: correct,
+    responseTimeSec
+  });
 
   if (correct) {
     sfx('correct');
@@ -7478,6 +7520,109 @@ function advanceCrossBorderCbrne(fromBriefing) {
   render();
 }
 
+// Build the structured AAR / details payload used for both persistence (Tracker
+// endMode `details` field, Firebase mode_results) and the AAR render. Single
+// source of truth so admin-side analytics match what the learner sees.
+function buildCrossBorderCbrneSummary() {
+  const content = window.CROSS_BORDER_CBRNE;
+  if (!content) return null;
+  const steps = (Array.isArray(G.cbxSteps) && G.cbxSteps.length) ? G.cbxSteps : content.steps;
+  const mcqSteps = steps.filter(s => s.kind === 'mcq');
+  const total = mcqSteps.length;
+  const correct = G.cbxCorrectCount || 0;
+  const accuracyPct = total > 0 ? Math.round((correct / total) * 100) : 0;
+  const log = (G.cbxAnswerLog || []).slice();
+  const m = G.cbxMetrics || {};
+  const targets = content.aarTargets || {};
+  const perStep = m.perStepCorrect || {};
+
+  const triageOk = !!perStep.triageAccuracy;
+  const antidoteOk = !!perStep.antidote;
+  const semanticsOk = !!perStep.semantics;
+  const preDeconOk = !!perStep.preDecon;
+  const degradedOk = !!perStep.degraded;
+  const allocationOk = !!perStep.contaminatedTransport;
+
+  const triageLatencyMissed = m.triageDashboardLatencySec != null && m.triageDashboardLatencySec > targets.triageDashboardLatencySec;
+  const handoverMissed = m.handoverDelaySec != null && m.handoverDelaySec > targets.handoverDelaySec;
+  const degradedRecMissed = m.degradedRecoverySec != null && m.degradedRecoverySec > targets.degradedRecoverySec;
+
+  const strengths = [];
+  const improvements = [];
+  if (triageOk) strengths.push('MASS/START Red/Immediate classification correct'); else improvements.push('Reinforce MASS/START Red/Immediate criteria for inhalational toxidromes');
+  if (antidoteOk) strengths.push('Cyanide antidote (Hydroxocobalamin) selected correctly'); else improvements.push('Cyanide antidote: Hydroxocobalamin — distinguish from Ca-gluconate (HF) and atropine/2-PAM (nerve agents)');
+  if (preDeconOk) strengths.push('Pre-decontamination life-saving priority applied'); else improvements.push('Apply Priority 0 life-saving intervention before routine wet decon for arresting patients');
+  if (semanticsOk) strengths.push('Cross-border semantic mapping handled with provenance and flag'); else improvements.push('Preserve source label, map to shared dashboard, and flag non-equivalence');
+  if ((m.contaminatedTransportErrors || 0) === 0) strengths.push('Zero preventable contaminated transports'); else improvements.push('Avoid transport of non-decontaminated casualties without receiver alert');
+
+  const recs = [];
+  if (!semanticsOk) recs.push('Pre-publish a bilingual EU↔KOR triage-term mapping table on the shared COP and rehearse it during quarterly handover drills');
+  if (!degradedOk || degradedRecMissed) recs.push('Inject a degraded-network event in every functional drill (≥6 min latency, duplicate / lost messages) and require timestamp + uncertainty flags + radio fallback');
+  if (!antidoteOk || !preDeconOk) recs.push('Pre-stage Hydroxocobalamin (Cyanokit) at transport hubs and rehearse the Priority-0 pre-decon algorithm with hot-zone teams');
+  if (!allocationOk) recs.push('Codify a receiver-alert + capacity-confirm-before-transport check into the standing cross-border SOP, with a written cross-border notification SLA');
+  if (triageLatencyMissed) recs.push(`Reduce triage→dashboard latency: target ≤${targets.triageDashboardLatencySec}s. Use one-tap dashboard entry from field tablets and pre-printed Red/Immediate stickers`);
+  if (handoverMissed) recs.push(`Reduce hospital handover delay: target ≤${targets.handoverDelaySec}s. Standardise a 5-line cross-border handover script (ID, agent, decon status, triage, ETA)`);
+  if (recs.length === 0) recs.push('Maintain the current playbook: bilingual semantic mapping, degraded-network injects, pre-staged Hydroxocobalamin and pre-transport receiver alerts are all on target. Schedule a quarterly re-drill to prevent decay.');
+
+  // Per-step correctness summary keyed by stepId (admin-side analytics).
+  const perStepSummary = mcqSteps.map(s => {
+    const entry = log.find(l => l.stepId === s.id);
+    return {
+      stepIndex: typeof s.stepIndex === 'number' ? s.stepIndex : null,
+      stepId: s.id,
+      construct: s.construct || s.metric || null,
+      phase: s.phase || null,
+      role: s.role || null,
+      correctOptionId: s.correctOptionId || null,
+      selectedOptionId: entry ? (entry.selectedOptionId || null) : null,
+      isCorrect: entry ? !!entry.isCorrect : false,
+      responseTimeSec: entry ? entry.responseTimeSec : null,
+      displayedOptionOrder: entry ? entry.displayedOptionOrder : (s.displayedOptionOrder || [])
+    };
+  });
+
+  return {
+    modeKey: 'crossBorderCbrne',
+    modeName: 'Cross-Border CBRNe Drill',
+    language: (typeof window !== 'undefined' && window.GAME_LANG) ? window.GAME_LANG : 'en',
+    nickname: G.nickname || null,
+    team: G.team || null,
+    sessionId: (typeof Tracker !== 'undefined' && Tracker.sessionId) ? Tracker.sessionId : null,
+    startedAt: G.cbxStartMs ? new Date(G.cbxStartMs).toISOString() : null,
+    completedAt: new Date().toISOString(),
+    totalQuestions: total,
+    totalCorrect: correct,
+    accuracyPct,
+    score: G.score || 0,
+    xp: G.xp || 0,
+    maxStreak: G.maxStreak || 0,
+    aarMetrics: {
+      triageDashboardLatencySec: m.triageDashboardLatencySec,
+      handoverLatencySec: m.handoverDelaySec,
+      contaminatedTransportErrors: m.contaminatedTransportErrors || 0,
+      degradedNetworkRecoverySec: m.degradedRecoverySec,
+      targets: {
+        triageDashboardLatencySec: targets.triageDashboardLatencySec,
+        handoverDelaySec: targets.handoverDelaySec,
+        contaminatedTransportErrors: targets.contaminatedTransportErrors,
+        degradedRecoverySec: targets.degradedRecoverySec
+      },
+      pass: {
+        triageDashboardLatency: m.triageDashboardLatencySec != null && m.triageDashboardLatencySec <= targets.triageDashboardLatencySec,
+        handover: m.handoverDelaySec != null && m.handoverDelaySec <= targets.handoverDelaySec,
+        contaminatedTransport: (m.contaminatedTransportErrors || 0) <= (targets.contaminatedTransportErrors || 0),
+        degradedRecovery: m.degradedRecoverySec != null && m.degradedRecoverySec <= targets.degradedRecoverySec
+      }
+    },
+    perStepCorrect: perStep,
+    perStepSummary,
+    answerLog: log,
+    strengths,
+    improvements,
+    recommendations: recs
+  };
+}
+
 function finishCrossBorderCbrne() {
   G.modesCompleted.add('crossBorderCbrne');
   const content = window.CROSS_BORDER_CBRNE;
@@ -7488,7 +7633,9 @@ function finishCrossBorderCbrne() {
   if (pct === 100 && total > 0) G.perfectModes++;
   checkAchievements();
   advanceStoryAct();
-  Tracker.endMode(G.cbxCorrectCount);
+  const summary = buildCrossBorderCbrneSummary();
+  G.cbxSummary = summary;
+  Tracker.endMode(G.cbxCorrectCount, summary);
   Tracker.endSession(G.score, G.level, G.maxStreak, G.modesCompleted);
   G.screen = 'crossBorderCbrneAAR';
   render();

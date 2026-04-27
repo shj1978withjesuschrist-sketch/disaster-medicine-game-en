@@ -75,6 +75,7 @@ const CROSS_BORDER_CBRNE = {
       kind: 'mcq',
       role: 'field',
       phase: 'Clinical recognition',
+      construct: 'triage',
       metric: 'triageAccuracy',
       title: 'MASS/START Triage Decision',
       patient: 'Adult passenger collapsed on the platform shortly after an aerosol release. Findings: dyspnea, altered mentation, unable to ambulate, no external trauma. Hot-zone toxidrome consistent with inhalational cyanide exposure.',
@@ -92,6 +93,7 @@ const CROSS_BORDER_CBRNE = {
       kind: 'mcq',
       role: 'field',
       phase: 'Clinical recognition',
+      construct: 'pre_decon',
       metric: 'preDecon',
       title: 'Pre-Decontamination Priority',
       patient: 'Same patient now at the warm-zone boundary: agonal breathing, GCS dropping, suspected cyanide toxidrome. Wet decontamination is staged but not yet started.',
@@ -109,6 +111,7 @@ const CROSS_BORDER_CBRNE = {
       kind: 'mcq',
       role: 'commander',
       phase: 'Clinical recognition',
+      construct: 'antidote',
       metric: 'antidote',
       title: 'Cyanide Antidote Decision',
       patient: 'Casualty in the cold zone after aerosol exposure: lactate markedly elevated, hypotension refractory to fluids, altered mentation, near-normal SpO₂ on high-flow O₂. Lab and clinical picture are diagnostic of an inhalational cyanide toxidrome.',
@@ -126,6 +129,7 @@ const CROSS_BORDER_CBRNE = {
       kind: 'mcq',
       role: 'semantics',
       phase: 'Coordination',
+      construct: 'semantic_mapping',
       metric: 'semantics',
       title: 'Cross-Border Semantic Mapping',
       prompt: 'A handover from the EU-side EMS labels an inbound patient as "Critical". The shared Korean DMAT/START dashboard uses Red / Immediate, Yellow / Delayed, Green / Minor and Black / Expectant. How do you enter this patient on the shared dashboard?',
@@ -142,6 +146,7 @@ const CROSS_BORDER_CBRNE = {
       kind: 'mcq',
       role: 'dispatch',
       phase: 'Coordination',
+      construct: 'degraded_network',
       metric: 'degraded',
       title: 'Degraded-Network Inject',
       prompt: 'Mid-drill inject: the hospital-capacity dashboard refresh has fallen behind by ~6 minutes, one inbound radio message has arrived twice, and another seems to have been lost. Allocations are still required. What is the correct response?',
@@ -158,6 +163,7 @@ const CROSS_BORDER_CBRNE = {
       kind: 'mcq',
       role: 'hospital',
       phase: 'Cross-border allocation',
+      construct: 'allocation',
       metric: 'contaminatedTransport',
       title: 'Cross-Border Hospital Allocation',
       prompt: 'A Red / Immediate patient who has not yet been decontaminated is loaded for transport. The receiving facility is across the border. Capacity has not yet been confirmed. What do you do?',
@@ -199,11 +205,17 @@ function cbxShuffleInPlace(arr) {
 // Build a per-session randomized copy of the steps. Briefing keeps its position;
 // MCQ steps keep their order, but each step's options are shuffled independently.
 // Correctness is carried on each option (id + isCorrect), so shuffle is safe.
+// Each step is stamped with `stepIndex` (position in scenario, 0-based) and
+// `displayedOptionOrder` (frozen array of option IDs in the order shown to the
+// learner) so analytics can faithfully reconstruct what the learner saw.
 function buildRandomizedCrossBorderSteps() {
-  return CROSS_BORDER_CBRNE.steps.map(step => {
-    if (step.kind !== 'mcq' || !Array.isArray(step.options)) return { ...step };
+  return CROSS_BORDER_CBRNE.steps.map((step, idx) => {
+    if (step.kind !== 'mcq' || !Array.isArray(step.options)) {
+      return { ...step, stepIndex: idx, displayedOptionOrder: [] };
+    }
     const shuffledOpts = cbxShuffleInPlace(step.options.map(o => ({ ...o })));
-    return { ...step, options: shuffledOpts };
+    const displayedOptionOrder = shuffledOpts.map(o => o.id);
+    return { ...step, options: shuffledOpts, stepIndex: idx, displayedOptionOrder };
   });
 }
 

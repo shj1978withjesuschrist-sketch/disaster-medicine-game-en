@@ -68,14 +68,18 @@
       if (!firebaseReady || !db) return;
       try {
         const ref = db.ref(`live/${_version}/mode_results/${sessionId}`);
-        ref.push({
+        const payload = {
           mode: modeResult.mode,
           score: modeResult.score || 0,
           correct: modeResult.correct || 0,
           total: modeResult.total || 0,
           time_sec: modeResult.time_sec || 0,
           at: new Date().toISOString()
-        });
+        };
+        if (modeResult.details && typeof modeResult.details === 'object') {
+          payload.details = modeResult.details;
+        }
+        ref.push(payload);
       } catch(e) { console.warn('Firebase mode result push failed:', e); }
     },
 
@@ -83,14 +87,18 @@
     pushAnswer(sessionId, answer) {
       if (!firebaseReady || !db) return;
       try {
-        db.ref(`live/${_version}/answers/${sessionId}`).push({
+        const payload = {
           mode: answer.mode,
           question_id: answer.question_id,
           selected: answer.selected,
           correct: answer.correct,
           time_sec: answer.time_sec || 0,
           at: new Date().toISOString()
-        });
+        };
+        if (answer.extras && typeof answer.extras === 'object') {
+          payload.extras = answer.extras;
+        }
+        db.ref(`live/${_version}/answers/${sessionId}`).push(payload);
       } catch(e) {}
     },
 

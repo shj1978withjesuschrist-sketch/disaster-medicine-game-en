@@ -97,6 +97,84 @@ assert(appSrc.includes("'Cross-Border CBRNe Drill'") || appSrc.includes('"Cross-
   'app.js references exact mode name "Cross-Border CBRNe Drill"');
 assert(!/iscram/i.test(appSrc), 'No ISCRAM token in app.js');
 
+// 8a. Every MCQ step carries a `construct` tag in the canonical taxonomy
+const validConstructs = new Set(['triage', 'pre_decon', 'antidote', 'semantic_mapping', 'degraded_network', 'allocation']);
+for (const s of mcq) {
+  assert(typeof s.construct === 'string' && validConstructs.has(s.construct),
+    `${s.id}: construct tag is one of {${[...validConstructs].join(', ')}} (got ${s.construct})`);
+}
+// Constructs are unique across the drill — each step targets a distinct domain
+{
+  const seen = new Set();
+  let dup = false;
+  for (const s of mcq) { if (seen.has(s.construct)) dup = true; seen.add(s.construct); }
+  assert(!dup, 'Each construct appears exactly once across MCQ steps');
+}
+
+// 8b. Randomized build stamps stepIndex and displayedOptionOrder
+{
+  const built = m.buildRandomizedCrossBorderSteps();
+  for (let i = 0; i < built.length; i++) {
+    assert(built[i].stepIndex === i, `step ${i}: stepIndex stamped (${built[i].stepIndex})`);
+  }
+  for (const s of built) {
+    if (s.kind !== 'mcq') continue;
+    assert(Array.isArray(s.displayedOptionOrder) && s.displayedOptionOrder.length === s.options.length,
+      `${s.id}: displayedOptionOrder is full-length array of option IDs`);
+    // displayedOptionOrder matches the actual option order in this build
+    const live = s.options.map(o => o.id);
+    assert(JSON.stringify(s.displayedOptionOrder) === JSON.stringify(live),
+      `${s.id}: displayedOptionOrder snapshot matches live option order`);
+    // Every entry is a real option id of this step
+    const idSet = new Set(s.options.map(o => o.id));
+    assert(s.displayedOptionOrder.every(id => idSet.has(id)),
+      `${s.id}: every displayedOptionOrder entry is a real option id`);
+  }
+}
+
+// 8c. Tracker.recordAnswer call for cross-border passes structured extras
+{
+  const flat = appSrc.replace(/\s+/g, ' ');
+  const idx = flat.indexOf('Tracker.recordAnswer(`crossBorderCbrne_${step.id}`');
+  assert(idx >= 0, 'app.js: Tracker.recordAnswer is invoked for crossBorderCbrne');
+  const window = flat.slice(idx, idx + 800);
+  assert(window.indexOf('displayedOptionOrder') > 0,
+    'Tracker.recordAnswer call for crossBorderCbrne includes displayedOptionOrder extras');
+  assert(window.indexOf('construct') > 0,
+    'Tracker.recordAnswer call for crossBorderCbrne includes construct extra');
+  assert(window.indexOf('correctOptionId') > 0,
+    'Tracker.recordAnswer call for crossBorderCbrne includes correctOptionId extra');
+}
+
+// 8d. Tracker.endMode for cross-border passes the structured summary
+assert(/buildCrossBorderCbrneSummary\s*\(\)/.test(appSrc),
+  'app.js builds a structured summary at drill completion');
+assert(/Tracker\.endMode\(G\.cbxCorrectCount,\s*summary\)/.test(appSrc),
+  'app.js Tracker.endMode for crossBorderCbrne forwards the summary as `details`');
+
+// 8e. Tracker.endMode signature accepts an optional details param and forwards it
+assert(/async endMode\(score,\s*details\)/.test(appSrc),
+  'Tracker.endMode signature: (score, details)');
+assert(/JSON\.stringify\(details\)/.test(appSrc),
+  'Tracker.endMode stringifies details for backend persistence');
+
+// 8f. Admin label coverage — admin.html maps crossBorderCbrne to the exact mode name
+const adminSrc = fs.readFileSync(path.join(__dirname, 'admin.html'), 'utf8');
+assert(/crossBorderCbrne:\s*\{[^}]*name:\s*'Cross-Border CBRNe Drill'/.test(adminSrc),
+  'admin.html MODE_NAMES maps crossBorderCbrne → "Cross-Border CBRNe Drill"');
+assert(!/iscram/i.test(adminSrc), 'No ISCRAM token in admin.html');
+assert(/renderCrossBorderSummary/.test(adminSrc),
+  'admin.html defines drill-specific summary renderer');
+assert(/CROSSBORDER_STEP_TO_CONSTRUCT/.test(adminSrc),
+  'admin.html maps step IDs to construct keys');
+assert(/filterQuestions\('crossBorderCbrne'\)/.test(adminSrc),
+  'admin.html question-analysis filter tab includes crossBorderCbrne');
+
+// 8g. Firebase sync forwards extras / details
+const fbSrc = fs.readFileSync(path.join(__dirname, 'firebase_sync.js'), 'utf8');
+assert(/answer\.extras/.test(fbSrc), 'firebase_sync.pushAnswer forwards extras');
+assert(/modeResult\.details/.test(fbSrc), 'firebase_sync.pushModeResult forwards details');
+
 // 9. Smoke test: simulate a full run answering correctly via option.isCorrect
 {
   const steps = m.buildRandomizedCrossBorderSteps();
