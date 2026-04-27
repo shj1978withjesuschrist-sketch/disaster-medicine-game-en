@@ -247,6 +247,7 @@ const ACHIEVEMENTS = [
   // SURGE
   { id: 'surge_clear', name: 'SURGE Cleared', desc: 'Complete SURGE chain scenario', icon: '🏥', category: 'mastery', check: g => g.modesCompleted.has('surge') },
   { id: 'zero_preventable', name: 'Zero Preventable Deaths', desc: 'Achieve 0 preventable deaths in SURGE', icon: '🛡️', category: 'legend', check: g => g.surgeZeroPD === true },
+  { id: 'crossborder_cleared', name: 'Cross-Border Drill Cleared', desc: 'Complete the Cross-Border CBRNe Drill', icon: '🛂', category: 'mastery', check: g => g.modesCompleted.has('crossBorderCbrne') },
   // Legend
   { id: 'all_achieve', name: 'Complete', desc: 'Earn all achievements', icon: '🎊', category: 'legend', check: g => g.earnedAchievements.length >= 16 },
 ];
@@ -1022,6 +1023,8 @@ function render() {
   else if (s === 'ctm') renderCTM();
   else if (s === 'ctmScenario') renderCTMScenario();
   else if (s === 'ctmBoss') renderCTMBoss();
+  else if (s === 'crossBorderCbrne') renderCrossBorderCbrne();
+  else if (s === 'crossBorderCbrneAAR') renderCrossBorderCbrneAAR();
 }
 
 // ---- INTRO ----
@@ -1127,6 +1130,7 @@ const MODE_LABELS = {
   hseep_tabletop: 'HSEEP Tabletop Exercise',
   hseep_functional: 'HSEEP Functional Exercise',
   hseep_fullscale: 'HSEEP Full-Scale Exercise',
+  crossBorderCbrne: 'Cross-Border CBRNe Drill',
   boss: 'Final Boss Challenge',
   scenario: 'Scenario Mode',
   field: 'Field Operations',
@@ -1722,6 +1726,7 @@ function renderModeSelect() {
     { key: 'tactical', icon: '🎯', title: 'Tactical Medicine', desc: 'TCCC/TECC tactical field emergency medicine', tag: 'Tactical Medicine', color: 'green' },
     { key: 'ctm', icon: '🛡️', title: 'Counter-Terrorism Medicine', desc: 'Expert knowledge and response in counter-terrorism medicine', tag: 'CTM', color: 'red' },
     { key: 'hseep', icon: '📋', title: 'HSEEP Exercise Design', desc: 'Master FEMA HSEEP-based disaster exercise design', tag: 'HSEEP', color: 'blue' },
+    { key: 'crossBorderCbrne', icon: '🛂', title: 'Cross-Border CBRNe Drill', desc: 'Cross-border cyanide attack drill: roles, triage, antidote, semantic mapping, degraded network, AAR', tag: 'Cross-Border Drill', color: 'cyan' },
   ];
 
   const lb = [...G.leaderboard];
@@ -1857,6 +1862,25 @@ function enterMode(mode) {
     if (!content) { alert('Failed to load Counter-Terrorism Medicine content'); return; }
     G.ctmQ = [...content.ctmQuestions].sort(() => Math.random() - 0.5).slice(0, 15);
     G.ctmIdx = 0; G.ctmScore = 0; G.ctmAnswered = false;
+  }
+  if (mode === 'crossBorderCbrne') {
+    const content = window.CROSS_BORDER_CBRNE;
+    if (!content) { alert('Failed to load Cross-Border CBRNe content'); return; }
+    const driftMs = 1500 + Math.floor(Math.random() * 4000);
+    G.cbxStartMs = Date.now();
+    G.cbxStepIdx = 0;
+    G.cbxAnswered = false;
+    G.cbxSelected = null;
+    G.cbxCorrectCount = 0;
+    G.cbxAnswerLog = [];
+    G.cbxMetrics = {
+      triageDashboardLatencySec: null,
+      handoverDelaySec: null,
+      contaminatedTransportErrors: 0,
+      degradedRecoverySec: null,
+      perStepCorrect: {}
+    };
+    G.cbxBriefingMs = Date.now() + driftMs; // simulated comms-drift baseline
   }
   Tracker.startQuestion();
   render();
@@ -7267,3 +7291,313 @@ function renderHSEEPCampaignResult() {
 // ============================================
 // END OF HSEEP GAME MODULE
 // ============================================
+
+// =============================================
+// CROSS-BORDER CBRNe DRILL — render & flow
+// Mode key: crossBorderCbrne
+// =============================================
+function renderCrossBorderCbrne() {
+  const content = window.CROSS_BORDER_CBRNE;
+  if (!content) { app.innerHTML = '<div class="screen"><p>Cross-Border CBRNe content failed to load.</p><button class="btn-outline" onclick="G.screen=\'modes\';render();">← Back</button></div>'; return; }
+  const step = content.steps[G.cbxStepIdx];
+  if (!step) { finishCrossBorderCbrne(); return; }
+
+  const totalSteps = content.steps.length;
+  const progressPct = Math.round((G.cbxStepIdx / totalSteps) * 100);
+
+  const rolesHtml = content.roles.map(r => {
+    const active = (step.role === r.key) || (step.role === 'all');
+    return `<div class="cbx-role ${active ? 'active' : ''}">
+      <div class="cbx-role-icon">${r.icon}</div>
+      <div class="cbx-role-text">
+        <div class="cbx-role-name">${r.name}</div>
+        <div class="cbx-role-desc">${r.desc}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  let bodyHtml = '';
+  if (step.kind === 'briefing') {
+    const matrixRows = content.briefing.matrix.map(m =>
+      `<tr><td>${m.hazard}</td><td>${m.sector}</td><td>${m.task}</td><td>${m.inject}</td><td>${m.expected}</td><td>${m.risk}</td></tr>`
+    ).join('');
+    const semRows = content.semanticsTable.map(s =>
+      `<tr><td>${s.sourceSystem}</td><td>${s.sourceTerm}</td><td>${s.dashboardTerm}</td><td>${s.koreanTerm}</td><td>${s.flag}</td></tr>`
+    ).join('');
+    bodyHtml = `
+      <div class="cbx-briefing">
+        <h3>${content.briefing.title}</h3>
+        <p class="cbx-loc">📍 ${content.briefing.location}</p>
+        <p>${content.briefing.summary}</p>
+        <div class="cbx-objectives">
+          <strong>Drill objectives</strong>
+          <ul>${content.briefing.objectives.map(o => `<li>${o}</li>`).join('')}</ul>
+        </div>
+        <div class="cbx-matrix-wrap">
+          <strong>Scenario matrix</strong>
+          <div class="cbx-table-scroll">
+            <table class="cbx-table">
+              <thead><tr><th>Hazard</th><th>Sector</th><th>Task</th><th>Inject</th><th>Expected action</th><th>Failure risk</th></tr></thead>
+              <tbody>${matrixRows}</tbody>
+            </table>
+          </div>
+        </div>
+        <div class="cbx-matrix-wrap">
+          <strong>Medical semantics mapping</strong>
+          <div class="cbx-table-scroll">
+            <table class="cbx-table">
+              <thead><tr><th>Source system</th><th>Source term</th><th>Shared dashboard</th><th>Korean DMAT/START</th><th>Flag / notes</th></tr></thead>
+              <tbody>${semRows}</tbody>
+            </table>
+          </div>
+        </div>
+        <button class="btn-primary cbx-ack" onclick="advanceCrossBorderCbrne(true)">${step.acknowledge} →</button>
+      </div>`;
+  } else if (step.kind === 'mcq') {
+    const patientHtml = step.patient ? `<div class="cbx-patient"><span class="cbx-pin">🧑‍⚕️ Patient</span> ${step.patient}</div>` : '';
+    const optsHtml = step.options.map((opt, i) => {
+      let cls = 'cbx-opt';
+      if (G.cbxAnswered) {
+        if (opt.correct) cls += ' correct';
+        if (G.cbxSelected === i && !opt.correct) cls += ' wrong';
+      }
+      const dis = G.cbxAnswered ? 'disabled' : '';
+      return `<button class="${cls}" ${dis} onclick="answerCrossBorderCbrne(${i})">
+        <span class="cbx-opt-letter">${String.fromCharCode(65 + i)}</span>
+        <span class="cbx-opt-text">${opt.text}</span>
+        ${G.cbxAnswered ? `<div class="cbx-opt-why">${opt.why}</div>` : ''}
+      </button>`;
+    }).join('');
+    const nextBtn = G.cbxAnswered
+      ? `<button class="btn-primary cbx-next" onclick="advanceCrossBorderCbrne(false)">Next decision →</button>`
+      : '';
+    bodyHtml = `
+      <div class="cbx-step-card">
+        <div class="cbx-step-meta">Decision ${G.cbxStepIdx} / ${totalSteps - 1}</div>
+        <h3>${step.title}</h3>
+        ${patientHtml}
+        <p class="cbx-prompt">${step.prompt}</p>
+        <div class="cbx-opts">${optsHtml}</div>
+        ${nextBtn}
+      </div>`;
+  }
+
+  app.innerHTML = `
+    ${renderHUD('cbxTimer')}
+    <div class="screen cbx-screen">
+      <div class="cbx-header">
+        <span class="cbx-tag">🛂 Cross-Border CBRNe Drill</span>
+        <div class="cbx-progress"><div class="cbx-progress-fill" style="width:${progressPct}%"></div></div>
+      </div>
+      ${charBubble('mentor', step.kind === 'briefing'
+        ? 'Briefing first. Read the matrix and the semantics mapping — both will matter during the drill.'
+        : 'Decide as the highlighted role. Watch for distractors that match common Kahoot misconceptions.', { delay: 0 })}
+      <div class="cbx-roles">${rolesHtml}</div>
+      ${bodyHtml}
+      <div class="cbx-exit-row">
+        <button class="btn-outline" onclick="G.screen='modes';stopAllTimers();render();">← Exit Drill</button>
+      </div>
+    </div>`;
+}
+
+function answerCrossBorderCbrne(idx) {
+  if (G.cbxAnswered) return;
+  const content = window.CROSS_BORDER_CBRNE;
+  const step = content.steps[G.cbxStepIdx];
+  if (!step || step.kind !== 'mcq') return;
+
+  const opt = step.options[idx];
+  const correct = !!opt.correct;
+  G.cbxAnswered = true;
+  G.cbxSelected = idx;
+
+  const tNow = Date.now();
+  const elapsedSec = Math.max(0, Math.round((tNow - (G.cbxBriefingMs || tNow)) / 1000));
+  G.cbxAnswerLog.push({
+    stepId: step.id,
+    role: step.role,
+    selected: idx,
+    correct,
+    elapsedSec,
+    at: new Date().toISOString()
+  });
+  if (step.metric) G.cbxMetrics.perStepCorrect[step.metric] = correct;
+
+  // Metric capture per step type
+  if (step.id === 'triage' && correct) G.cbxMetrics.triageDashboardLatencySec = elapsedSec;
+  if (step.id === 'allocation') G.cbxMetrics.handoverDelaySec = elapsedSec;
+  if (step.id === 'allocation' && !correct) G.cbxMetrics.contaminatedTransportErrors += 1;
+  if (step.id === 'degraded' && correct) G.cbxMetrics.degradedRecoverySec = elapsedSec;
+
+  Tracker.recordAnswer(`crossBorderCbrne_${step.id}`, String(idx), correct);
+
+  if (correct) {
+    sfx('correct');
+    flashScreen('green');
+    addScore(120);
+    addXP(30);
+    G.cbxCorrectCount++;
+    updateStreak(true);
+    G.totalCorrect++;
+  } else {
+    sfx('wrong');
+    shakeScreen();
+    addScore(-20);
+    updateStreak(false);
+  }
+  checkAchievements();
+  render();
+}
+
+function advanceCrossBorderCbrne(fromBriefing) {
+  G.cbxStepIdx++;
+  G.cbxAnswered = false;
+  G.cbxSelected = null;
+  Tracker.startQuestion();
+  const content = window.CROSS_BORDER_CBRNE;
+  if (G.cbxStepIdx >= content.steps.length) {
+    finishCrossBorderCbrne();
+    return;
+  }
+  render();
+}
+
+function finishCrossBorderCbrne() {
+  G.modesCompleted.add('crossBorderCbrne');
+  const content = window.CROSS_BORDER_CBRNE;
+  const mcqSteps = content.steps.filter(s => s.kind === 'mcq');
+  const total = mcqSteps.length;
+  const pct = total > 0 ? Math.round((G.cbxCorrectCount / total) * 100) : 0;
+  if (pct === 100 && total > 0) G.perfectModes++;
+  checkAchievements();
+  advanceStoryAct();
+  Tracker.endMode(G.cbxCorrectCount);
+  Tracker.endSession(G.score, G.level, G.maxStreak, G.modesCompleted);
+  G.screen = 'crossBorderCbrneAAR';
+  render();
+}
+
+function renderCrossBorderCbrneAAR() {
+  const content = window.CROSS_BORDER_CBRNE;
+  const targets = content.aarTargets;
+  const m = G.cbxMetrics || {};
+  const log = G.cbxAnswerLog || [];
+
+  function metricRow(label, actual, target, unit, betterLower) {
+    let pass;
+    if (actual == null) pass = false;
+    else if (betterLower) pass = actual <= target;
+    else pass = actual >= target;
+    const cls = pass ? 'aar-pass' : 'aar-fail';
+    const actualText = (actual == null) ? '—' : (actual + unit);
+    const tgtText = (betterLower ? '≤ ' : '≥ ') + target + unit;
+    return `<tr class="${cls}"><td>${label}</td><td>${actualText}</td><td>${tgtText}</td><td>${pass ? '✅' : '⚠️'}</td></tr>`;
+  }
+
+  const perStep = m.perStepCorrect || {};
+  const triageOk = !!perStep.triageAccuracy;
+  const antidoteOk = !!perStep.antidote;
+  const semanticsOk = !!perStep.semantics;
+  const preDeconOk = !!perStep.preDecon;
+
+  const strengths = [];
+  const improvements = [];
+  if (triageOk) strengths.push('MASS/START Red/Immediate classification correct'); else improvements.push('Reinforce MASS/START Red/Immediate criteria for inhalational toxidromes');
+  if (antidoteOk) strengths.push('Cyanide antidote (Hydroxocobalamin) selected correctly'); else improvements.push('Cyanide antidote: Hydroxocobalamin — distinguish from Ca-gluconate (HF) and atropine/2-PAM (nerve agents)');
+  if (preDeconOk) strengths.push('Pre-decontamination life-saving priority applied'); else improvements.push('Apply Priority 0 life-saving intervention before routine wet decon for arresting patients');
+  if (semanticsOk) strengths.push('Cross-border semantic mapping handled with provenance and flag'); else improvements.push('Preserve source label, map to shared dashboard, and flag non-equivalence');
+  if ((m.contaminatedTransportErrors || 0) === 0) strengths.push('Zero preventable contaminated transports'); else improvements.push('Avoid transport of non-decontaminated casualties without receiver alert');
+
+  const recs = [
+    'Drill bilingual handover scripts and semantic flags before any joint exercise',
+    'Run a degraded-network inject in every functional drill — not just a happy-path COP',
+    'Pre-stage Hydroxocobalamin and rehearse pre-decon Priority 0 algorithm at hub stations',
+    'Build receiver-alert + capacity-confirm into the standing cross-border SOP'
+  ];
+
+  const timelineHtml = log.map((l, i) => {
+    const stepDef = content.steps.find(s => s.id === l.stepId);
+    return `<div class="aar-tl-row ${l.correct ? 'ok' : 'no'}">
+      <span class="aar-tl-num">${i+1}</span>
+      <span class="aar-tl-time">+${l.elapsedSec}s</span>
+      <span class="aar-tl-step">${stepDef ? stepDef.title : l.stepId}</span>
+      <span class="aar-tl-mark">${l.correct ? '✅' : '❌'}</span>
+    </div>`;
+  }).join('');
+
+  const semRows = content.semanticsTable.map(s =>
+    `<tr><td>${s.sourceSystem}</td><td>${s.sourceTerm}</td><td>${s.dashboardTerm}</td><td>${s.koreanTerm}</td><td>${s.flag}</td></tr>`
+  ).join('');
+
+  const grade = pctGrade(G.cbxCorrectCount, content.steps.filter(s=>s.kind==='mcq').length);
+  if (grade === 'S' || grade === 'A') confetti();
+
+  app.innerHTML = `
+    <div class="screen results-screen cbx-aar-screen">
+      ${charBubble('mentor', 'Hot wash. Read the timeline, then the metric table — that is where decisions become evidence.', { success: true })}
+      <div class="result-big anim-in">🛂</div>
+      <div class="result-sub">Cross-Border CBRNe Drill — After-Action Review</div>
+      <div class="result-grade ${grade==='S'?'s':grade==='A'?'a':grade==='B'?'b':'c'} anim-in">Grade: ${grade}</div>
+
+      <div class="aar-section anim-in">
+        <h3>Decision timeline</h3>
+        <div class="aar-tl">${timelineHtml || '<em>No decisions logged.</em>'}</div>
+      </div>
+
+      <div class="aar-section anim-in">
+        <h3>Drill metrics</h3>
+        <table class="aar-metrics">
+          <thead><tr><th>Metric</th><th>Result</th><th>Target</th><th></th></tr></thead>
+          <tbody>
+            ${metricRow('Triage accuracy (Red/Immediate)', triageOk ? 100 : 0, 100, '%', false)}
+            ${metricRow('Cyanide antidote correctness', antidoteOk ? 100 : 0, 100, '%', false)}
+            ${metricRow('Semantic mapping accuracy', semanticsOk ? 100 : 0, 100, '%', false)}
+            ${metricRow('Triage → dashboard latency', m.triageDashboardLatencySec, targets.triageDashboardLatencySec, 's', true)}
+            ${metricRow('Handover delay', m.handoverDelaySec, targets.handoverDelaySec, 's', true)}
+            ${metricRow('Preventable contaminated transport', m.contaminatedTransportErrors || 0, targets.contaminatedTransportErrors, '', true)}
+            ${metricRow('Degraded-network recovery', m.degradedRecoverySec, targets.degradedRecoverySec, 's', true)}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="aar-section anim-in">
+        <h3>Strengths</h3>
+        <ul class="aar-list ok">${strengths.map(s=>`<li>${s}</li>`).join('') || '<li>None identified yet.</li>'}</ul>
+        <h3>Areas for improvement</h3>
+        <ul class="aar-list no">${improvements.map(s=>`<li>${s}</li>`).join('') || '<li>None — well done.</li>'}</ul>
+        <h3>Recommendations</h3>
+        <ul class="aar-list rec">${recs.map(s=>`<li>${s}</li>`).join('')}</ul>
+      </div>
+
+      <div class="aar-section anim-in">
+        <h3>Medical semantics mapping (reference)</h3>
+        <div class="cbx-table-scroll">
+          <table class="cbx-table">
+            <thead><tr><th>Source system</th><th>Source term</th><th>Shared dashboard</th><th>Korean DMAT/START</th><th>Flag / notes</th></tr></thead>
+            <tbody>${semRows}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="result-stats anim-in">
+        <div class="r-stat"><div class="val">${G.cbxCorrectCount}/${content.steps.filter(s=>s.kind==='mcq').length}</div><div class="lbl">Correct decisions</div></div>
+        <div class="r-stat"><div class="val">${G.score}</div><div class="lbl">Total score</div></div>
+        <div class="r-stat"><div class="val">${G.maxStreak}</div><div class="lbl">Max streak</div></div>
+      </div>
+
+      <div class="result-actions anim-in">
+        <button class="btn-primary" onclick="G.screen='modes';render();">Select Mission 🏠</button>
+        <button class="btn-outline" onclick="enterMode('crossBorderCbrne')">Retry Drill 🔄</button>
+      </div>
+    </div>`;
+}
+
+function pctGrade(correct, total) {
+  if (!total) return 'C';
+  const pct = Math.round((correct / total) * 100);
+  if (pct >= 90) return 'S';
+  if (pct >= 75) return 'A';
+  if (pct >= 50) return 'B';
+  return 'C';
+}
+
