@@ -175,6 +175,51 @@ const fbSrc = fs.readFileSync(path.join(__dirname, 'firebase_sync.js'), 'utf8');
 assert(/answer\.extras/.test(fbSrc), 'firebase_sync.pushAnswer forwards extras');
 assert(/modeResult\.details/.test(fbSrc), 'firebase_sync.pushModeResult forwards details');
 
+// 8h. Backend persistence schema: mode_results.details + question_responses.extras
+const apiSrc = fs.readFileSync(path.join(__dirname, 'api_server.py'), 'utf8');
+assert(/mode_results[\s\S]*?details TEXT/.test(apiSrc),
+  'api_server: mode_results.details TEXT column declared');
+assert(/question_responses[\s\S]*?extras TEXT/.test(apiSrc),
+  'api_server: question_responses.extras TEXT column declared');
+assert(/_ensure_column\(["']mode_results["'],\s*["']details["']/.test(apiSrc),
+  'api_server: safe ALTER TABLE migration for mode_results.details');
+assert(/_ensure_column\(["']question_responses["'],\s*["']extras["']/.test(apiSrc),
+  'api_server: safe ALTER TABLE migration for question_responses.extras');
+
+// 8i. QuestionResponse model accepts extras and INSERT carries it
+assert(/class QuestionResponse[\s\S]*?extras:\s*Optional\[str\]/.test(apiSrc),
+  'api_server: QuestionResponse model accepts optional extras');
+assert(/INSERT INTO question_responses[\s\S]*?extras\)/.test(apiSrc),
+  'api_server: INSERT INTO question_responses includes extras column');
+assert(/data\.extras/.test(apiSrc),
+  'api_server: save_question_response forwards data.extras into the INSERT');
+
+// 8j. Mode result POST already persists details (regression check)
+assert(/INSERT INTO mode_results[\s\S]*?details\)/.test(apiSrc),
+  'api_server: INSERT INTO mode_results includes details column');
+
+// 8k. Admin endpoint to surface persisted details for AAR pass-rate aggregates / option distribution
+assert(/@app\.get\(["']\/api\/admin\/mode\/\{mode\}\/details["']\)/.test(apiSrc),
+  'api_server: GET /api/admin/mode/{mode}/details endpoint registered');
+assert(/def admin_mode_details/.test(apiSrc),
+  'api_server: admin_mode_details handler defined');
+assert(/details_parsed/.test(apiSrc) && /extras_parsed/.test(apiSrc),
+  'api_server: admin_mode_details parses persisted details/extras JSON for analytics consumers');
+
+// 8l. Tracker.recordAnswer forwards extras to /api/question/response
+{
+  const flat = appSrc.replace(/\s+/g, ' ');
+  const idx = flat.indexOf('/api/question/response');
+  assert(idx > 0, 'app.js: /api/question/response endpoint referenced');
+  const window = flat.slice(Math.max(0, idx - 600), idx + 200);
+  assert(/qBody\.extras\s*=\s*JSON\.stringify\(extras\)/.test(window) ||
+         /extras:\s*JSON\.stringify\(extras\)/.test(window),
+    'Tracker.recordAnswer JSON-stringifies extras into the question/response POST body');
+}
+
+// 8m. No user-facing ISCRAM in api_server either
+assert(!/iscram/i.test(apiSrc), 'No ISCRAM token in api_server.py');
+
 // 9. Smoke test: simulate a full run answering correctly via option.isCorrect
 {
   const steps = m.buildRandomizedCrossBorderSteps();

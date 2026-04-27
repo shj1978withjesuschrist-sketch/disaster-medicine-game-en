@@ -64,9 +64,10 @@ def init_db(db):
         is_correct BOOLEAN,
         time_taken_sec INTEGER DEFAULT 0,
         answered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        extras TEXT,
         FOREIGN KEY (session_id) REFERENCES sessions(session_id)
     );
-    
+
     CREATE INDEX IF NOT EXISTS idx_sessions_nickname ON sessions(nickname);
     CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at);
     CREATE INDEX IF NOT EXISTS idx_mode_results_session ON mode_results(session_id);
@@ -74,6 +75,14 @@ def init_db(db):
     CREATE INDEX IF NOT EXISTS idx_question_responses_session ON question_responses(session_id);
     CREATE INDEX IF NOT EXISTS idx_question_responses_question ON question_responses(question_id);
     """)
+    # Safe backward-compatible migrations for older DBs that pre-date these columns.
+    # SQLite has no IF NOT EXISTS for ADD COLUMN — guard via PRAGMA table_info.
+    def _ensure_column(table, column, decl):
+        cols = [r[1] for r in db.execute(f"PRAGMA table_info({table})").fetchall()]
+        if column not in cols:
+            db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+    _ensure_column("mode_results", "details", "TEXT")
+    _ensure_column("question_responses", "extras", "TEXT")
     db.commit()
 
 db = get_db()
@@ -125,6 +134,7 @@ class QuestionResponse(BaseModel):
     selected_answer: str
     is_correct: bool
     time_taken_sec: int = 0
+    extras: Optional[str] = None
 
 class SessionEnd(BaseModel):
     session_id: str
@@ -168,8 +178,8 @@ def save_mode_result(data: ModeResult):
 @app.post("/api/question/response")
 def save_question_response(data: QuestionResponse):
     db.execute(
-        "INSERT INTO question_responses (session_id, mode, question_id, selected_answer, is_correct, time_taken_sec) VALUES (?, ?, ?, ?, ?, ?)",
-        [data.session_id, data.mode, data.question_id, data.selected_answer, data.is_correct, data.time_taken_sec]
+        "INSERT INTO question_responses (session_id, mode, question_id, selected_answer, is_correct, time_taken_sec, extras) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [data.session_id, data.mode, data.question_id, data.selected_answer, data.is_correct, data.time_taken_sec, data.extras]
     )
     db.commit()
     return {"status": "saved"}
@@ -327,6 +337,72 @@ def admin_question_analytics(request: Request, mode: str = ""):
         """).fetchall()
     
     return {"questions": [dict(r) for r in rows]}
+
+@app.get("/api/admin/mode/{mode}/details")
+def admin_mode_details(mode: str, request: Request, limit: int = 200):
+    """
+    Surface persisted mode_results.details and per-question extras for a given mode.
+    Enables admin-side AAR pass-rate aggregates and option-distribution analysis
+    on top of the data already collected by Tracker.endMode / Tracker.recordAnswer.
+    The mode key is matched exactly (e.g. crossBorderCbrne).
+    """
+    require_admin(request)
+    if limit < 1:
+        limit = 1
+    if limit > 1000:
+        limit = 1000
+
+    mode_rows = db.execute(
+        """
+        SELECT id, session_id, mode, score, total_questions, correct_answers,
+               time_spent_sec, completed_at, details
+        FROM mode_results
+        WHERE mode=?
+        ORDER BY completed_at DESC
+        LIMIT ?
+        """,
+        [mode, limit]
+    ).fetchall()
+
+    qr_rows = db.execute(
+        """
+        SELECT id, session_id, mode, question_id, selected_answer, is_correct,
+               time_taken_sec, answered_at, extras
+        FROM question_responses
+        WHERE mode=? OR mode LIKE ? || '\\_%' ESCAPE '\\'
+        ORDER BY answered_at DESC
+        LIMIT ?
+        """,
+        [mode, mode, limit * 10]
+    ).fetchall()
+
+    def _parse_json(s):
+        if not s:
+            return None
+        try:
+            return json.loads(s)
+        except Exception:
+            return None
+
+    mode_results_out = []
+    for r in mode_rows:
+        d = dict(r)
+        d["details_parsed"] = _parse_json(d.get("details"))
+        mode_results_out.append(d)
+
+    qr_out = []
+    for r in qr_rows:
+        d = dict(r)
+        d["extras_parsed"] = _parse_json(d.get("extras"))
+        qr_out.append(d)
+
+    return {
+        "mode": mode,
+        "n_mode_results": len(mode_results_out),
+        "n_question_responses": len(qr_out),
+        "mode_results": mode_results_out,
+        "question_responses": qr_out
+    }
 
 @app.get("/api/admin/export/csv")
 def admin_export_csv(request: Request):
@@ -1230,7 +1306,8 @@ def research_export(request: Request):
             ],
             "question_responses": [
                 "id", "session_id", "mode", "question_id", "selected_answer",
-                "is_correct", "is_correct_int", "time_taken_sec", "answered_at"
+                "is_correct", "is_correct_int", "time_taken_sec", "answered_at",
+                "extras"
             ]
         },
         "data": {

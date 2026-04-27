@@ -461,17 +461,21 @@ const Tracker = {
       FirebaseSync.pushSessionUpdate({ sessionId: this.sessionId, nickname: G.nickname, team: G.team||'', total_score: G.score, max_level: G.level, max_streak: G.maxStreak, modes_completed: [...G.modesCompleted], current_mode: this.currentMode, current_progress: {correct: this.modeCorrect, total: this.modeTotal}, device: /Mobi|Android/i.test(navigator.userAgent)?'mobile':'desktop', started_at: '' });
     }
     try {
+      const qBody = {
+        session_id: this.sessionId,
+        mode: this.currentMode,
+        question_id: String(questionId),
+        selected_answer: String(selectedAnswer),
+        is_correct: isCorrect,
+        time_taken_sec: timeTaken
+      };
+      if (extras && typeof extras === 'object') {
+        try { qBody.extras = JSON.stringify(extras); } catch(e) {}
+      }
       await fetch(`${TRACKING_API}/api/question/response`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          session_id: this.sessionId,
-          mode: this.currentMode,
-          question_id: String(questionId),
-          selected_answer: String(selectedAnswer),
-          is_correct: isCorrect,
-          time_taken_sec: timeTaken
-        })
+        body: JSON.stringify(qBody)
       });
     } catch(e) {}
   },
