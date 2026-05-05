@@ -1,0 +1,37 @@
+{
+  "name": "Disaster Medicine Survival",
+  "short_name": "DM Survival",
+  "description": "Interactive disaster medicine training: START triage, MCI command, CBRNE response, HSEEP exercises.",
+  "lang": "en-US",
+  "dir": "ltr",
+  "start_url": "./?utm_source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0c10",
+  "theme_color": "#0a0c10",
+  "categories": ["education", "medical", "games"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ],
+  "shortcuts": [
+    {
+      "name": "START Triage",
+      "short_name": "Triage",
+      "description": "Quick triage practice",
+      "url": "./?mode=triage",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Boss Round",
+      "short_name": "Boss",
+      "description": "Boss-level mass casualty incident",
+      "url": "./?mode=boss",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
