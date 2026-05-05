@@ -1310,6 +1310,10 @@ input {
   transition: all var(--transition);
   opacity: 0.35;
   pointer-events: none;
+  /* Phase F: keep the confirm-triage button visible on a single screen on mobile. */
+  position: sticky;
+  bottom: 8px;
+  z-index: 5;
 }
 
 .go-btn.ready { opacity: 1; pointer-events: auto; }

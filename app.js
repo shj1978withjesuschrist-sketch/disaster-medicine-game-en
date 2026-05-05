@@ -6,7 +6,7 @@
 // ---- CHARACTER SYSTEM ----
 const CHARS = {
   mentor: {
-    name: 'Dr. Kim Eungup',
+    name: 'Dr. Sarah Chen',
     role: 'Mentor',
     emoji: '👨‍⚕️',
     color: 'var(--blue)',
@@ -35,7 +35,7 @@ const CHARS = {
     ]
   },
   nurse: {
-    name: 'Nurse Park Hana',
+    name: 'Nurse Maria Santos',
     role: 'Assistant',
     emoji: '👩‍⚕️',
     color: 'var(--green)',
@@ -48,7 +48,7 @@ const CHARS = {
     ]
   },
   paramedic: {
-    name: 'Paramedic Lee Gugup',
+    name: 'Paramedic James O’Brien',
     role: 'Field Responder',
     emoji: '🧑‍🚒',
     color: 'var(--orange)',
@@ -74,7 +74,7 @@ const CHARS = {
     ]
   },
   commander: {
-    name: 'Chief Choi Jihwi',
+    name: 'Chief Fatima Al-Rashid',
     role: 'Commander',
     emoji: '🎖️',
     color: 'var(--purple)',
@@ -592,11 +592,11 @@ const G = {
 
   // Leaderboard
   leaderboard: [
-    { name: 'Dr. Kim', score: 2850 },
-    { name: 'Lee Regi', score: 2400 },
-    { name: 'Park Ganho', score: 2100 },
-    { name: 'Choi Eungup', score: 1800 },
-    { name: 'Jeong Gujo', score: 1500 },
+    { name: 'Dr. S. Chen', score: 2850 },
+    { name: 'M. Santos, RN', score: 2400 },
+    { name: 'J. O’Brien', score: 2100 },
+    { name: 'Dr. K. Asante', score: 1800 },
+    { name: 'F. Al-Rashid', score: 1500 },
   ],
 
   // Modes completed
@@ -615,8 +615,56 @@ if (window.FirebaseSync) { FirebaseSync.init('en'); }
 
 // ---- AUDIO ----
 let audioCtx;
+// Phase F: Audio settings (default ON, user can toggle)
+if (typeof window !== 'undefined' && typeof window.SURGE_AUDIO_ENABLED === 'undefined') {
+  try { window.SURGE_AUDIO_ENABLED = localStorage.getItem('surge_audio') !== 'off'; } catch(e) { window.SURGE_AUDIO_ENABLED = true; }
+}
+function toggleAudio() {
+  window.SURGE_AUDIO_ENABLED = !window.SURGE_AUDIO_ENABLED;
+  try { localStorage.setItem('surge_audio', window.SURGE_AUDIO_ENABLED ? 'on' : 'off'); } catch(e) {}
+  if (!window.SURGE_AUDIO_ENABLED) stopBGM();
+  else if (G.screen && G.screen !== 'intro') startBGM(G.screen === 'boss' || G.screen === 'cbrneAdvBoss' ? 'tense' : 'ambient');
+}
+window.toggleAudio = toggleAudio;
+
+// Phase F: simple ambient/tense BGM (WebAudio, no asset files)
+let bgmInterval = null, bgmStep = 0;
+function stopBGM() { if (bgmInterval) { clearInterval(bgmInterval); bgmInterval = null; } }
+function startBGM(mood) {
+  if (!window.SURGE_AUDIO_ENABLED) return;
+  stopBGM();
+  try { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { return; }
+  const patterns = {
+    ambient: [110, 0, 0, 0, 138.6, 0, 0, 0, 130.8, 0, 0, 0, 110, 0, 0, 0],
+    tense:   [82.4, 0, 82.4, 0, 110, 0, 82.4, 0, 87.3, 0, 87.3, 0, 116.5, 0, 87.3, 0]
+  };
+  const seq = patterns[mood] || patterns.ambient;
+  bgmStep = 0;
+  bgmInterval = setInterval(() => {
+    if (!window.SURGE_AUDIO_ENABLED) { stopBGM(); return; }
+    const f = seq[bgmStep % seq.length]; bgmStep++;
+    if (!f) return;
+    try {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'lowpass'; filter.frequency.value = 600;
+      osc.type = mood === 'tense' ? 'sawtooth' : 'sine';
+      osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+      const now = audioCtx.currentTime;
+      osc.frequency.setValueAtTime(f, now);
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(0.04, now + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+      osc.start(now); osc.stop(now + 0.55);
+    } catch(e) {}
+  }, 320);
+}
+window.startBGM = startBGM; window.stopBGM = stopBGM;
+
 function sfx(type) {
   try {
+    if (!window.SURGE_AUDIO_ENABLED) return;
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
@@ -665,6 +713,32 @@ function sfx(type) {
       gain.gain.setValueAtTime(0.15, now);
       gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
       osc.start(now); osc.stop(now + 0.6);
+    } else if (type === 'click') {
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(1200, now);
+      gain.gain.setValueAtTime(0.04, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+      osc.start(now); osc.stop(now + 0.04);
+    } else if (type === 'siren') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(660, now);
+      osc.frequency.linearRampToValueAtTime(880, now + 0.25);
+      osc.frequency.linearRampToValueAtTime(660, now + 0.5);
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+      osc.start(now); osc.stop(now + 0.6);
+    } else if (type === 'heartbeat') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(60, now);
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      osc.start(now); osc.stop(now + 0.12);
+      const osc2 = audioCtx.createOscillator(); const g2 = audioCtx.createGain();
+      osc2.connect(g2); g2.connect(audioCtx.destination);
+      osc2.type = 'sine'; osc2.frequency.setValueAtTime(60, now + 0.18);
+      g2.gain.setValueAtTime(0.1, now + 0.18);
+      g2.gain.exponentialRampToValueAtTime(0.001, now + 0.30);
+      osc2.start(now + 0.18); osc2.stop(now + 0.30);
     }
   } catch (e) {}
 }
@@ -1009,6 +1083,14 @@ function renderAchievements() {
 
 function render() {
   const s = G.screen;
+  // Phase F: persist session on every screen change + adapt BGM mood by context.
+  try { if (s !== 'intro' && s !== 'classSelect') saveSession(); } catch(e) {}
+  try {
+    if (window.SURGE_AUDIO_ENABLED && s !== 'intro') {
+      const isTense = (s === 'boss' || s === 'cbrneAdvBoss' || s === 'tacticalBoss' || s === 'ctmBoss');
+      if (!bgmInterval) startBGM(isTense ? 'tense' : 'ambient');
+    }
+  } catch(e) {}
   if (s === 'intro') renderIntro();
   else if (s === 'classSelect') renderClassSelect();
   else if (s === 'cutscene') showCutscene(G.currentAct);
@@ -1049,7 +1131,7 @@ function showPrivacyModal() {
   inner.style.cssText = 'max-width:640px;max-height:80vh;overflow-y:auto;background:#11141d;border:1px solid #2a3050;border-radius:14px;padding:28px;color:#cdd1dc;font-size:0.86rem;line-height:1.65;';
   inner.innerHTML = `
     <h2 style="margin:0 0 14px;color:#7fb0ff;font-size:1.15rem;">Privacy Notice (Summary)</h2>
-    <p><strong>Controller:</strong> Shin's Disaster Medicine Academy LLC (operated by Soonchunhyang University Disaster Medicine Center)</p>
+    <p><strong>Owner / Controller:</strong> Shin’s Disaster Medicine Academy LLC (신재난의학아카데미 유한책임회사)<br><strong>Operating Partner:</strong> Soonchunhyang University Disaster Medicine Center</p>
     <p><strong>Data collected:</strong></p>
     <ul style="margin:6px 0 12px;padding-left:18px;">
       <li>Nickname (anonymous, max 30 chars)</li>
@@ -1088,7 +1170,7 @@ function renderIntro() {
           </svg>
         </div>
         <h1 class="game-title">Disaster Medicine<br><span class="em">Survival</span></h1>
-        <p class="game-subtitle">Shin's Disaster Medicine Academy LLC<br>Interactive RPG Education Simulator v5</p>
+        <p class="game-subtitle">Shin’s Disaster Medicine Academy LLC<br>Interactive RPG Education Simulator v5</p>
       </div>
       <div class="qr-section" id="qr-section"></div>
       <div class="nick-input-wrap">
@@ -1101,6 +1183,12 @@ function renderIntro() {
           <option value="Delta">🟡 Team Delta</option>
           <option value="Echo">🟣 Team Echo</option>
         </select>
+      </div>
+      <div class="privacy-box" style="max-width:520px;margin:14px auto 12px;padding:12px 16px;background:rgba(80,140,255,0.06);border:1px solid rgba(80,140,255,0.25);border-radius:10px;color:#cdd1dc;font-size:0.78rem;line-height:1.5;text-align:left;">
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="consent-check" style="margin-top:3px;"/>
+          <span>I consent to anonymous logging of my learning progress and answers (do <strong>not</strong> enter real names, emails, or any personal identifiers as a nickname). <a href="#" id="privacy-link" style="color:#7fb0ff;">View Privacy Notice</a></span>
+        </label>
       </div>
       <button class="enter-btn" id="enter-btn" disabled>Ready to Deploy 🚑</button>
       <div class="badge-row">
@@ -1116,15 +1204,9 @@ function renderIntro() {
         <strong style="color:#ff7a8a;">⚠️ For Educational & Training Use Only</strong><br>
         This simulation is intended solely for education and training. It is <strong>not a medical device</strong> and must not be used for diagnostic or treatment decisions. Real patient care must follow established clinical guidelines and the judgment of qualified medical professionals.
       </div>
-      <div class="privacy-box" style="max-width:520px;margin:10px auto 0;padding:12px 16px;background:rgba(80,140,255,0.06);border:1px solid rgba(80,140,255,0.25);border-radius:10px;color:#cdd1dc;font-size:0.78rem;line-height:1.5;text-align:left;">
-        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">
-          <input type="checkbox" id="consent-check" style="margin-top:3px;"/>
-          <span>I consent to anonymous logging of my learning progress and answers (do <strong>not</strong> enter real names, emails, or any personal identifiers as a nickname). <a href="#" id="privacy-link" style="color:#7fb0ff;">View Privacy Notice</a></span>
-        </label>
-      </div>
       <div class="game-footer-credit">
-        <p>© 2026 Shin's Disaster Medicine Academy LLC. All rights reserved.</p>
-        <p>Education Operations: Soonchunhyang University Disaster Medicine Center</p>
+        <p>© 2026 Shin’s Disaster Medicine Academy LLC. All rights reserved.</p>
+        <p>Operating Partner: Soonchunhyang University Disaster Medicine Center · Aligned with the JOSHUA Initiative (Horizon Europe Cluster 3)</p>
       </div>
     </div>`;
 
@@ -1777,11 +1859,9 @@ function startGame() {
   G.nickname = nick;
   const rawTeam = (document.getElementById('team-select') || {}).value || '';
   G.team = sanitizeUserText(rawTeam, 30);
-  // Phase B: Pre-test required (skip if already taken)
-  if (window.Assessment && !window.Assessment.hasPreTest()) {
-    window.Assessment.showPreTest(function () { _continueStartGame(); });
-    return;
-  }
+  // Phase F: Pre-test is now optional. New users explore the game first; the
+  // "📊 Learning Outcome Measure" button on the main menu invites them to
+  // contribute to assessment voluntarily.
   _continueStartGame();
 }
 
@@ -1806,6 +1886,8 @@ function _continueStartGame() {
   G.currentAct = 0;
   G.storyMode = true;
   sfx('alert');
+  // Phase F: auto-start ambient BGM after the first user gesture (Start button click).
+  try { startBGM('ambient'); } catch(e) {}
   Tracker.startSession(nick);
   // RPG: go to class select first
   G.screen = 'classSelect';
@@ -1819,6 +1901,7 @@ function renderHUD(timerKey) {
   const classInfo = G.playerClass ? CLASSES[G.playerClass] : null;
   return `
     <div class="game-hud">
+      <button class="hud-home-btn" onclick="goHomeHub()" title="Return to main hub" aria-label="Return to main hub" style="background:rgba(127,176,255,0.12);border:1px solid rgba(127,176,255,0.35);color:#cfe0ff;border-radius:10px;padding:6px 12px;font-size:0.85rem;font-weight:600;cursor:pointer;margin-right:8px;">← Hub</button>
       <div class="hud-left">
         <div class="hud-avatar">${classInfo ? classInfo.icon : G.nickname.charAt(0)}</div>
         <span class="hud-name">${G.nickname}</span>
@@ -1837,6 +1920,44 @@ function renderHUD(timerKey) {
       <div class="xp-fill" style="width:${(G.xp % 200) / 200 * 100}%"></div>
     </div>`;
 }
+
+// Phase F: Safe return to main hub — stops timers, persists session, navigates to mode select.
+function goHomeHub() {
+  const ok = confirm('Carefully exit the current mode and return to the main hub?\n(Score, XP, and achievements are preserved.)');
+  if (!ok) return;
+  try { stopAllTimers(); } catch(e) {}
+  try { saveSession(); } catch(e) {}
+  G.screen = 'modes';
+  render();
+}
+window.goHomeHub = goHomeHub;
+
+// Phase F: localStorage-backed session auto-save infrastructure.
+function saveSession() {
+  if (!G.nickname) return;
+  try {
+    const snap = {
+      nickname: G.nickname, team: G.team, score: G.score, xp: G.xp, level: G.level,
+      maxStreak: G.maxStreak, modesCompleted: Array.from(G.modesCompleted || []),
+      playerClass: G.playerClass, skillPoints: G.skillPoints,
+      unlockedSkills: G.unlockedSkills, earnedAchievements: G.earnedAchievements,
+      currentAct: G.currentAct, screen: G.screen, savedAt: Date.now()
+    };
+    localStorage.setItem('surge_session_v1', JSON.stringify(snap));
+  } catch(e) {}
+}
+function loadSession() {
+  try {
+    const raw = localStorage.getItem('surge_session_v1');
+    if (!raw) return null;
+    const snap = JSON.parse(raw);
+    if (!snap || !snap.nickname) return null;
+    if (Date.now() - (snap.savedAt || 0) > 7*24*3600*1000) return null; // 7-day expiry
+    return snap;
+  } catch(e) { return null; }
+}
+function clearSession() { try { localStorage.removeItem('surge_session_v1'); } catch(e) {} }
+window.saveSession = saveSession; window.loadSession = loadSession; window.clearSession = clearSession;
 
 function updateTimerDisplay(val) {
   const el = document.getElementById('timer-display');
@@ -1898,6 +2019,7 @@ function renderModeSelect() {
       <div class="rpg-nav-bar">
         <button class="rpg-nav-btn" onclick="G.screen='skilltree';render();">🌲 Skill Tree ${G.skillPoints > 0 ? `<span class="sp-dot">${G.skillPoints}</span>` : ''}</button>
         <button class="rpg-nav-btn" onclick="G.screen='achievements';render();">🏆 Achievements <span class="achieve-count">${G.earnedAchievements.length}/${ACHIEVEMENTS.length}</span></button>
+        <button class="rpg-nav-btn" onclick="if(window.Assessment){window.Assessment.showPreTest();}else{alert('Assessment module not loaded');}" title="Voluntary pre/post learning outcome assessment">📊 Learning Outcome Measure</button>
       </div>
 
       <div class="story-act-banner anim-in">
@@ -2309,19 +2431,31 @@ function renderCBRNE() {
       <div class="cbrne-progress-text">Response Step ${G.cbStep} / ${steps.length}</div>
 
       <div class="cbrne-steps stagger">
-        ${steps.map((step, i) => {
-          const orderIdx = G.cbOrder.indexOf(i);
-          const done = orderIdx !== -1;
-          const isCorrect = done && (i === correctOrderIds[orderIdx]);
-          return `<button class="cb-step ${done ? 'done' : ''} ${done ? (isCorrect ? 'ok' : 'nope') : ''}"
-            onclick="pickCBRNEStep(${i})" ${done ? 'disabled' : ''}>
-            <div class="cb-num">${done ? (orderIdx + 1) : (i + 1)}</div>
-            <div>
-              <h4>${step.title}</h4>
-              <p>${step.desc}</p>
-            </div>
-          </button>`;
-        }).join('')}
+        ${(() => {
+          // Phase F fix: shuffle display order so the correct sequence isn't revealed by the visual order.
+          // Deterministic Fisher-Yates shuffle (seed = scenario title) to keep order stable across re-renders.
+          const seed = String(sc.title).split('').reduce((a,c)=>a+c.charCodeAt(0),0) + G.cbIdx*31;
+          const seededRand = (n) => { let x = seed*9301+n*49297; return ((x%233280)+233280)%233280/233280; };
+          const order = steps.map((_,i)=>i);
+          for (let i = order.length-1; i > 0; i--) {
+            const j = Math.floor(seededRand(i) * (i+1));
+            [order[i], order[j]] = [order[j], order[i]];
+          }
+          return order.map((i, displayIdx) => {
+            const step = steps[i];
+            const orderIdx = G.cbOrder.indexOf(i);
+            const done = orderIdx !== -1;
+            const isCorrect = done && (i === correctOrderIds[orderIdx]);
+            return `<button class="cb-step ${done ? 'done' : ''} ${done ? (isCorrect ? 'ok' : 'nope') : ''}"
+              onclick="pickCBRNEStep(${i})" ${done ? 'disabled' : ''}>
+              <div class="cb-num">${done ? (orderIdx + 1) : '?'}</div>
+              <div>
+                <h4>${step.title}</h4>
+                <p>${step.desc}</p>
+              </div>
+            </button>`;
+          }).join('');
+        })()}
       </div>
     </div>`;
 
@@ -5224,9 +5358,9 @@ function showCTMBossResults() {
         <div class="mode-icon">⚔️</div>
         <div class="mode-info">
           <h3>Campaign Mode ${G.campaignProgress && Object.keys(G.campaignProgress).length > 0 ? '▶' : '🆕'}</h3>
-          <p>Zelda/FF-style storytelling RPG — Conquer the world of disaster</p>
+          <p>Cinematic narrative simulation — Lead immersive disaster response missions</p>
           <div class="mode-tag-row">
-            <span class="mode-tag" style="background:rgba(255,215,0,0.15);color:#ffd700">JRPG</span>
+            <span class="mode-tag" style="background:rgba(255,215,0,0.15);color:#ffd700">Narrative Sim</span>
           </div>
         </div>`;
       card.onclick = function() { enterMode('campaign'); };
