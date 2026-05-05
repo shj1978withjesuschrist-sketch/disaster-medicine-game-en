@@ -1024,6 +1024,40 @@ function render() {
   else if (s === 'ctmBoss') renderCTMBoss();
 }
 
+// ---- PRIVACY POLICY MODAL ----
+function showPrivacyModal() {
+  const existing = document.getElementById('privacy-modal');
+  if (existing) { existing.remove(); return; }
+  const modal = document.createElement('div');
+  modal.id = 'privacy-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(8,10,18,0.86);z-index:99999;display:flex;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(6px);';
+  const inner = document.createElement('div');
+  inner.style.cssText = 'max-width:640px;max-height:80vh;overflow-y:auto;background:#11141d;border:1px solid #2a3050;border-radius:14px;padding:28px;color:#cdd1dc;font-size:0.86rem;line-height:1.65;';
+  inner.innerHTML = `
+    <h2 style="margin:0 0 14px;color:#7fb0ff;font-size:1.15rem;">Privacy Notice (Summary)</h2>
+    <p><strong>Controller:</strong> Shin's Disaster Medicine Academy LLC (operated by Soonchunhyang University Disaster Medicine Center)</p>
+    <p><strong>Data collected:</strong></p>
+    <ul style="margin:6px 0 12px;padding-left:18px;">
+      <li>Nickname (anonymous, max 30 chars)</li>
+      <li>Selected team, class, device type (PC/mobile)</li>
+      <li>Learning progress: per-mode score, answer correctness, response time</li>
+      <li>Session start/end timestamps</li>
+    </ul>
+    <p><strong>Purpose:</strong> Aggregating educational outcomes, instructor feedback, and content improvement</p>
+    <p><strong>Retention:</strong> Up to 2 years (then automatically anonymised or deleted)</p>
+    <p><strong>Third parties:</strong> No data is sold or shared. Hosting only via Firebase Realtime Database (Google Cloud, EU/US) and Render.com.</p>
+    <p><strong>Your rights:</strong> Access, rectification, erasure, and restriction of processing of your session data. Contact shj1978withjesuschrist@gmail.com at any time.</p>
+    <p><strong>Important:</strong> Do not enter real names, government IDs, emails, phone numbers, or licence numbers as a nickname.</p>
+    <p style="margin-top:18px;color:#9aa3b8;">Compliant with GDPR Art.13 · South Korea PIPA</p>
+    <button id="privacy-close" style="margin-top:18px;padding:10px 22px;background:#7c3aed;color:#fff;border:none;border-radius:8px;font-size:0.92rem;font-weight:600;cursor:pointer;">Close</button>
+  `;
+  modal.appendChild(inner);
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+  document.getElementById('privacy-close').addEventListener('click', () => modal.remove());
+}
+window.showPrivacyModal = showPrivacyModal;
+
 // ---- INTRO ----
 function renderIntro() {
   const deployUrl = window.location.href;
@@ -1064,6 +1098,16 @@ function renderIntro() {
       <div class="admin-link-wrap">
         <button class="admin-link-btn" id="admin-link-btn">🔐 Admin</button>
       </div>
+      <div class="disclaimer-box" style="max-width:520px;margin:18px auto 0;padding:14px 16px;background:rgba(255,80,80,0.06);border:1px solid rgba(255,80,80,0.25);border-radius:10px;color:#cdd1dc;font-size:0.78rem;line-height:1.5;text-align:left;">
+        <strong style="color:#ff7a8a;">⚠️ For Educational & Training Use Only</strong><br>
+        This simulation is intended solely for education and training. It is <strong>not a medical device</strong> and must not be used for diagnostic or treatment decisions. Real patient care must follow established clinical guidelines and the judgment of qualified medical professionals.
+      </div>
+      <div class="privacy-box" style="max-width:520px;margin:10px auto 0;padding:12px 16px;background:rgba(80,140,255,0.06);border:1px solid rgba(80,140,255,0.25);border-radius:10px;color:#cdd1dc;font-size:0.78rem;line-height:1.5;text-align:left;">
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="consent-check" style="margin-top:3px;"/>
+          <span>I consent to anonymous logging of my learning progress and answers (do <strong>not</strong> enter real names, emails, or any personal identifiers as a nickname). <a href="#" id="privacy-link" style="color:#7fb0ff;">View Privacy Notice</a></span>
+        </label>
+      </div>
       <div class="game-footer-credit">
         <p>© 2026 Shin's Disaster Medicine Academy LLC. All rights reserved.</p>
         <p>Education Operations: Soonchunhyang University Disaster Medicine Center</p>
@@ -1089,16 +1133,46 @@ function renderIntro() {
     }
   } catch (e) {}
 
+  // Privacy modal handler
+  const privacyLink = document.getElementById('privacy-link');
+  if (privacyLink) {
+    privacyLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showPrivacyModal();
+    });
+  }
+
   // Nick input
   const nickInput = $('nick');
   const enterBtn = $('enter-btn');
-  nickInput.addEventListener('input', () => {
-    enterBtn.disabled = nickInput.value.trim().length < 1;
-  });
+  const consentCheck = document.getElementById('consent-check');
+
+  function refreshEnterBtn() {
+    const hasNick = nickInput.value.trim().length >= 1;
+    const hasConsent = !consentCheck || consentCheck.checked;
+    enterBtn.disabled = !(hasNick && hasConsent);
+  }
+  nickInput.addEventListener('input', refreshEnterBtn);
+  if (consentCheck) consentCheck.addEventListener('change', refreshEnterBtn);
+
+  function tryStart() {
+    if (!nickInput.value.trim()) return;
+    if (consentCheck && !consentCheck.checked) {
+      const box = document.querySelector('.privacy-box');
+      if (box) {
+        box.style.borderColor = '#ff5577';
+        box.style.background = 'rgba(255,80,120,0.12)';
+        setTimeout(() => { box.style.borderColor = ''; box.style.background = ''; }, 1200);
+      }
+      return;
+    }
+    startGame();
+  }
   nickInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && nickInput.value.trim()) startGame();
+    if (e.key === 'Enter') tryStart();
   });
-  enterBtn.addEventListener('click', startGame);
+  enterBtn.addEventListener('click', tryStart);
 
   // Admin dashboard — built-in, reads from in-memory store
   $('admin-link-btn').addEventListener('click', () => {
@@ -1134,7 +1208,7 @@ const MODE_LABELS = {
 };
 
 function renderAdminDashboard(overlay) {
-  const ADMIN_PASSWORD = 'disaster2026!';
+  // SECURITY: Admin password is verified server-side. No plaintext stored client-side.
   let loggedIn = false;
   let activeTab = 'overview';
   let sortCol = 'started_at';
@@ -1626,14 +1700,37 @@ function renderAdminDashboard(overlay) {
     overlay.style.display = 'none';
   });
 
-  const tryLogin = () => {
-    const pw = overlay.querySelector('#ad-pw').value;
-    if (pw === ADMIN_PASSWORD) {
-      loggedIn = true;
-      renderDashboard();
-    } else {
-      const errEl = overlay.querySelector('#ad-err');
-      if (errEl) errEl.style.display = 'block';
+  const tryLogin = async () => {
+    const pwEl = overlay.querySelector('#ad-pw');
+    const btn  = overlay.querySelector('#ad-login-btn');
+    const errEl = overlay.querySelector('#ad-err');
+    const pw = pwEl ? pwEl.value : '';
+    if (!pw) return;
+    if (btn) { btn.disabled = true; btn.textContent = 'Authenticating...'; }
+    try {
+      const res = await fetch(`${TRACKING_API}/api/admin/login`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ password: pw })
+      });
+      if (!res.ok) throw new Error('auth_failed');
+      const data = await res.json();
+      if (data && data.token) {
+        window.__adminToken = data.token;
+        window.__adminTokenExp = Date.now() + 60*60*1000;
+        loggedIn = true;
+        renderDashboard();
+        return;
+      }
+      throw new Error('no_token');
+    } catch(e) {
+      if (errEl) {
+        errEl.textContent = 'Wrong password or server unavailable.';
+        errEl.style.display = 'block';
+      }
+      if (pwEl) { pwEl.value = ''; pwEl.focus(); }
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Login'; }
     }
   };
 
@@ -1643,11 +1740,29 @@ function renderAdminDashboard(overlay) {
   });
 }
 
+// ---- INPUT SANITIZATION (XSS prevention) ----
+function sanitizeUserText(s, maxLen) {
+  if (s == null) return '';
+  let v = String(s);
+  v = v.replace(/[<>]/g, '')
+       .replace(/&/g, '\u0026')
+       .replace(/"/g, '')
+       .replace(/'/g, '')
+       .replace(/`/g, '')
+       .replace(/[\x00-\x1F\x7F\u200B-\u200F\u2028-\u202F\uFEFF]/g, '')
+       .replace(/(javascript|data|vbscript)\s*:/gi, '');
+  v = v.trim();
+  return v.slice(0, maxLen || 30);
+}
+window.sanitizeUserText = sanitizeUserText;
+
 function startGame() {
-  const nick = $('nick').value.trim();
+  const rawNick = $('nick').value.trim();
+  const nick = sanitizeUserText(rawNick, 30);
   if (!nick) return;
   G.nickname = nick;
-  G.team = (document.getElementById('team-select') || {}).value || '';
+  const rawTeam = (document.getElementById('team-select') || {}).value || '';
+  G.team = sanitizeUserText(rawTeam, 30);
   G.score = 0;
   G.xp = 0;
   G.level = 1;
