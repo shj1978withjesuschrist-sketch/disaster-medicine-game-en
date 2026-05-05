@@ -493,8 +493,22 @@ const Tracker = {
         })
       });
     } catch(e) {}
+    // Phase B: auto-trigger Post-test once 3+ modes done
+    try { maybeTriggerPostTest(); } catch(e) {}
   }
 };
+
+// Phase B: Post-test auto-trigger
+function maybeTriggerPostTest() {
+  if (!window.Assessment) return;
+  if (localStorage.getItem('posttest_result')) return;
+  if (!localStorage.getItem('pretest_result')) return;
+  const completed = (window.G && G.modesCompleted) ? G.modesCompleted.size : 0;
+  if (completed >= 3) {
+    setTimeout(function () { window.Assessment.triggerPostFlow(); }, 1200);
+  }
+}
+window.maybeTriggerPostTest = maybeTriggerPostTest;
 
 // ---- GAME STATE ----
 const G = {
@@ -1763,6 +1777,15 @@ function startGame() {
   G.nickname = nick;
   const rawTeam = (document.getElementById('team-select') || {}).value || '';
   G.team = sanitizeUserText(rawTeam, 30);
+  // Phase B: Pre-test required (skip if already taken)
+  if (window.Assessment && !window.Assessment.hasPreTest()) {
+    window.Assessment.showPreTest(function () { _continueStartGame(); });
+    return;
+  }
+  _continueStartGame();
+}
+
+function _continueStartGame() {
   G.score = 0;
   G.xp = 0;
   G.level = 1;
