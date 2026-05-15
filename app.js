@@ -1852,6 +1852,26 @@ function sanitizeUserText(s, maxLen) {
 }
 window.sanitizeUserText = sanitizeUserText;
 
+// Phase F2: One-time pre-test per nickname (localStorage-backed gate).
+function hasCompletedPreTestForNick(nick) {
+  try {
+    const raw = localStorage.getItem('surge_pretest_completed_v1');
+    if (!raw) return false;
+    const map = JSON.parse(raw);
+    return !!(map && map[nick]);
+  } catch(e) { return false; }
+}
+function markPreTestCompletedForNick(nick) {
+  try {
+    const raw = localStorage.getItem('surge_pretest_completed_v1');
+    const map = raw ? JSON.parse(raw) : {};
+    map[nick] = { completedAt: Date.now() };
+    localStorage.setItem('surge_pretest_completed_v1', JSON.stringify(map));
+  } catch(e) {}
+}
+window.hasCompletedPreTestForNick = hasCompletedPreTestForNick;
+window.markPreTestCompletedForNick = markPreTestCompletedForNick;
+
 function startGame() {
   const rawNick = $('nick').value.trim();
   const nick = sanitizeUserText(rawNick, 30);
@@ -1859,10 +1879,29 @@ function startGame() {
   G.nickname = nick;
   const rawTeam = (document.getElementById('team-select') || {}).value || '';
   G.team = sanitizeUserText(rawTeam, 30);
-  // Phase F: Pre-test is now optional. New users explore the game first; the
-  // "📊 Learning Outcome Measure" button on the main menu invites them to
-  // contribute to assessment voluntarily.
-  _continueStartGame();
+
+  // Phase F2: Pre-test required ONCE per nickname before the game unlocks.
+  // Auto-pass when this nickname has already completed it (or the Assessment
+  // module retains a prior session record).
+  const alreadyDone = hasCompletedPreTestForNick(nick)
+    || (window.Assessment && window.Assessment.hasPreTest && window.Assessment.hasPreTest());
+
+  if (alreadyDone) {
+    _continueStartGame();
+    return;
+  }
+
+  if (window.Assessment && window.Assessment.showPreTest) {
+    alert('📊 A short pre-test is required before your first run with this nickname.\nIt measures learning outcomes — you only need to complete it once per nickname.');
+    window.Assessment.showPreTest(function() {
+      markPreTestCompletedForNick(nick);
+      _continueStartGame();
+    });
+  } else {
+    // Assessment module not loaded — proceed safely (fail-open to avoid lockout).
+    console.warn('[SURGE] Assessment module not loaded — proceeding without pre-test.');
+    _continueStartGame();
+  }
 }
 
 function _continueStartGame() {
