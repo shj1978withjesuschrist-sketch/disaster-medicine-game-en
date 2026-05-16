@@ -247,6 +247,7 @@ const ACHIEVEMENTS = [
   // SURGE
   { id: 'surge_clear', name: 'SURGE Cleared', desc: 'Complete SURGE chain scenario', icon: '🏥', category: 'mastery', check: g => g.modesCompleted.has('surge') },
   { id: 'zero_preventable', name: 'Zero Preventable Deaths', desc: 'Achieve 0 preventable deaths in SURGE', icon: '🛡️', category: 'legend', check: g => g.surgeZeroPD === true },
+  { id: 'crossborder_cleared', name: 'Cross-Border Drill Cleared', desc: 'Complete the Cross-Border CBRNe Drill', icon: '🛂', category: 'mastery', check: g => g.modesCompleted.has('crossBorderCbrne') },
   // Legend
   { id: 'all_achieve', name: 'Complete', desc: 'Earn all achievements', icon: '🎊', category: 'legend', check: g => g.earnedAchievements.length >= 16 },
 ];
@@ -445,52 +446,69 @@ const Tracker = {
     this.questionStartTime = Date.now();
   },
 
-  async recordAnswer(questionId, selectedAnswer, isCorrect) {
+  async recordAnswer(questionId, selectedAnswer, isCorrect, extras) {
     if (!this.enabled || !this.sessionId) return;
     const timeTaken = Math.round((Date.now() - this.questionStartTime) / 1000);
     this.modeTotal++;
     if (isCorrect) this.modeCorrect++;
-    LocalStore.addAnswer({ mode: this.currentMode, question_id: String(questionId), selected: String(selectedAnswer), correct: isCorrect, time_sec: timeTaken, at: new Date().toISOString() });
+    const localEntry = { mode: this.currentMode, question_id: String(questionId), selected: String(selectedAnswer), correct: isCorrect, time_sec: timeTaken, at: new Date().toISOString() };
+    if (extras && typeof extras === 'object') localEntry.extras = extras;
+    LocalStore.addAnswer(localEntry);
     if (window.FirebaseSync && FirebaseSync.isReady()) {
-      FirebaseSync.pushAnswer(this.sessionId, { mode: this.currentMode, question_id: String(questionId), selected: String(selectedAnswer), correct: isCorrect, time_sec: timeTaken });
+      const fbAnswer = { mode: this.currentMode, question_id: String(questionId), selected: String(selectedAnswer), correct: isCorrect, time_sec: timeTaken };
+      if (extras && typeof extras === 'object') fbAnswer.extras = extras;
+      FirebaseSync.pushAnswer(this.sessionId, fbAnswer);
       FirebaseSync.pushSessionUpdate({ sessionId: this.sessionId, nickname: G.nickname, team: G.team||'', total_score: G.score, max_level: G.level, max_streak: G.maxStreak, modes_completed: [...G.modesCompleted], current_mode: this.currentMode, current_progress: {correct: this.modeCorrect, total: this.modeTotal}, device: /Mobi|Android/i.test(navigator.userAgent)?'mobile':'desktop', started_at: '' });
     }
     try {
+      const qBody = {
+        session_id: this.sessionId,
+        mode: this.currentMode,
+        question_id: String(questionId),
+        selected_answer: String(selectedAnswer),
+        is_correct: isCorrect,
+        time_taken_sec: timeTaken
+      };
+      if (extras && typeof extras === 'object') {
+        try { qBody.extras = JSON.stringify(extras); } catch(e) {}
+      }
       await fetch(`${TRACKING_API}/api/question/response`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          session_id: this.sessionId,
-          mode: this.currentMode,
-          question_id: String(questionId),
-          selected_answer: String(selectedAnswer),
-          is_correct: isCorrect,
-          time_taken_sec: timeTaken
-        })
+        body: JSON.stringify(qBody)
       });
     } catch(e) {}
   },
 
-  async endMode(score) {
+  async endMode(score, details) {
     if (!this.enabled || !this.sessionId) return;
     const timeSpent = Math.round((Date.now() - this.modeStartTime) / 1000);
     this.modeScore = score;
-    LocalStore.addModeResult({ mode: this.currentMode, score, correct: this.modeCorrect, total: this.modeTotal, time_sec: timeSpent, at: new Date().toISOString() });
+    const localResult = { mode: this.currentMode, score, correct: this.modeCorrect, total: this.modeTotal, time_sec: timeSpent, at: new Date().toISOString() };
+    if (details && typeof details === 'object') localResult.details = details;
+    LocalStore.addModeResult(localResult);
     if (window.FirebaseSync && FirebaseSync.isReady()) {
-      FirebaseSync.pushModeResult(this.sessionId, { mode: this.currentMode, score, correct: this.modeCorrect, total: this.modeTotal, time_sec: timeSpent });
+      const fbResult = { mode: this.currentMode, score, correct: this.modeCorrect, total: this.modeTotal, time_sec: timeSpent };
+      if (details && typeof details === 'object') fbResult.details = details;
+      FirebaseSync.pushModeResult(this.sessionId, fbResult);
     }
     try {
+      const body = {
+        session_id: this.sessionId,
+        mode: this.currentMode,
+        score: score,
+        total_questions: this.modeTotal,
+        correct_answers: this.modeCorrect,
+        time_spent_sec: timeSpent
+      };
+      if (details && typeof details === 'object') {
+        // Backend `details` column is TEXT — stringify the structured payload.
+        try { body.details = JSON.stringify(details); } catch(e) {}
+      }
       await fetch(`${TRACKING_API}/api/mode/result`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          session_id: this.sessionId,
-          mode: this.currentMode,
-          score: score,
-          total_questions: this.modeTotal,
-          correct_answers: this.modeCorrect,
-          time_spent_sec: timeSpent
-        })
+        body: JSON.stringify(body)
       });
     } catch(e) {}
     // Phase B: auto-trigger Post-test once 3+ modes done
@@ -1118,6 +1136,8 @@ function render() {
   else if (s === 'ctm') renderCTM();
   else if (s === 'ctmScenario') renderCTMScenario();
   else if (s === 'ctmBoss') renderCTMBoss();
+  else if (s === 'crossBorderCbrne') renderCrossBorderCbrne();
+  else if (s === 'crossBorderCbrneAAR') renderCrossBorderCbrneAAR();
 }
 
 // ---- PRIVACY POLICY MODAL ----
@@ -1297,6 +1317,7 @@ const MODE_LABELS = {
   hseep_tabletop: 'HSEEP Tabletop Exercise',
   hseep_functional: 'HSEEP Functional Exercise',
   hseep_fullscale: 'HSEEP Full-Scale Exercise',
+  crossBorderCbrne: 'Cross-Border CBRNe Drill',
   boss: 'Final Boss Challenge',
   scenario: 'Scenario Mode',
   field: 'Field Operations',
@@ -2020,6 +2041,7 @@ function renderModeSelect() {
     { key: 'tactical', icon: '🎯', title: 'Tactical Medicine', desc: 'TCCC/TECC tactical field emergency medicine', tag: 'Tactical Medicine', color: 'green' },
     { key: 'ctm', icon: '🛡️', title: 'Counter-Terrorism Medicine', desc: 'Expert knowledge and response in counter-terrorism medicine', tag: 'CTM', color: 'red' },
     { key: 'hseep', icon: '📋', title: 'HSEEP Exercise Design', desc: 'Master FEMA HSEEP-based disaster exercise design', tag: 'HSEEP', color: 'blue' },
+    { key: 'crossBorderCbrne', icon: '🛂', title: 'Cross-Border CBRNe Drill', desc: 'Cross-border cyanide attack drill: roles, triage, antidote, semantic mapping, degraded network, AAR', tag: 'Cross-Border Drill', color: 'cyan' },
   ];
 
   const lb = [...G.leaderboard];
@@ -2156,6 +2178,29 @@ function enterMode(mode) {
     if (!content) { alert('Failed to load Counter-Terrorism Medicine content'); return; }
     G.ctmQ = [...content.ctmQuestions].sort(() => Math.random() - 0.5).slice(0, 15);
     G.ctmIdx = 0; G.ctmScore = 0; G.ctmAnswered = false;
+  }
+  if (mode === 'crossBorderCbrne') {
+    const content = window.CROSS_BORDER_CBRNE;
+    if (!content) { alert('Failed to load Cross-Border CBRNe content'); return; }
+    const driftMs = 1500 + Math.floor(Math.random() * 4000);
+    G.cbxStartMs = Date.now();
+    G.cbxStepIdx = 0;
+    G.cbxAnswered = false;
+    G.cbxSelected = null;
+    G.cbxCorrectCount = 0;
+    G.cbxAnswerLog = [];
+    G.cbxMetrics = {
+      triageDashboardLatencySec: null,
+      handoverDelaySec: null,
+      contaminatedTransportErrors: 0,
+      degradedRecoverySec: null,
+      perStepCorrect: {}
+    };
+    G.cbxBriefingMs = Date.now() + driftMs; // simulated comms-drift baseline
+    // Per-session randomized copy of the drill steps with shuffled options.
+    G.cbxSteps = (typeof buildRandomizedCrossBorderSteps === 'function')
+      ? buildRandomizedCrossBorderSteps()
+      : content.steps.map(s => ({ ...s }));
   }
   Tracker.startQuestion();
   render();
@@ -7578,3 +7623,470 @@ function renderHSEEPCampaignResult() {
 // ============================================
 // END OF HSEEP GAME MODULE
 // ============================================
+
+// =============================================
+// CROSS-BORDER CBRNe DRILL — render & flow
+// Mode key: crossBorderCbrne
+// =============================================
+function renderCrossBorderCbrne() {
+  const content = window.CROSS_BORDER_CBRNE;
+  if (!content) { app.innerHTML = '<div class="screen"><p>Cross-Border CBRNe content failed to load.</p><button class="btn-outline" onclick="G.screen=\'modes\';render();">← Back</button></div>'; return; }
+  // Use the per-session randomized step set (built in enterMode). Fall back to
+  // the source content only as a defensive default; correctness is carried on
+  // each option, so either is safe.
+  const steps = (Array.isArray(G.cbxSteps) && G.cbxSteps.length) ? G.cbxSteps : content.steps;
+  const step = steps[G.cbxStepIdx];
+  if (!step) { finishCrossBorderCbrne(); return; }
+
+  const totalSteps = steps.length;
+  const progressPct = Math.round((G.cbxStepIdx / totalSteps) * 100);
+
+  const rolesHtml = content.roles.map(r => {
+    const active = (step.role === r.key) || (step.role === 'all');
+    return `<div class="cbx-role ${active ? 'active' : ''}">
+      <div class="cbx-role-icon">${r.icon}</div>
+      <div class="cbx-role-text">
+        <div class="cbx-role-name">${r.name}</div>
+        <div class="cbx-role-desc">${r.desc}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  let bodyHtml = '';
+  if (step.kind === 'briefing') {
+    const matrixRows = content.briefing.matrix.map(m =>
+      `<tr><td>${m.hazard}</td><td>${m.sector}</td><td>${m.task}</td><td>${m.inject}</td><td>${m.expected}</td><td>${m.risk}</td></tr>`
+    ).join('');
+    const semRows = content.semanticsTable.map(s =>
+      `<tr><td>${s.sourceSystem}</td><td>${s.sourceTerm}</td><td>${s.dashboardTerm}</td><td>${s.koreanTerm}</td><td>${s.flag}</td></tr>`
+    ).join('');
+    bodyHtml = `
+      <div class="cbx-briefing">
+        <h3>${content.briefing.title}</h3>
+        <p class="cbx-loc">📍 ${content.briefing.location}</p>
+        <p>${content.briefing.summary}</p>
+        <div class="cbx-objectives">
+          <strong>Drill objectives</strong>
+          <ul>${content.briefing.objectives.map(o => `<li>${o}</li>`).join('')}</ul>
+        </div>
+        <div class="cbx-matrix-wrap">
+          <strong>Scenario matrix</strong>
+          <div class="cbx-table-scroll">
+            <table class="cbx-table">
+              <thead><tr><th>Hazard</th><th>Sector</th><th>Task</th><th>Inject</th><th>Expected action</th><th>Failure risk</th></tr></thead>
+              <tbody>${matrixRows}</tbody>
+            </table>
+          </div>
+        </div>
+        <div class="cbx-matrix-wrap">
+          <strong>Medical semantics mapping</strong>
+          <div class="cbx-table-scroll">
+            <table class="cbx-table">
+              <thead><tr><th>Source system</th><th>Source term</th><th>Shared dashboard</th><th>Korean DMAT/START</th><th>Flag / notes</th></tr></thead>
+              <tbody>${semRows}</tbody>
+            </table>
+          </div>
+        </div>
+        <button class="btn-primary cbx-ack" onclick="advanceCrossBorderCbrne(true)">${step.acknowledge} →</button>
+      </div>`;
+  } else if (step.kind === 'mcq') {
+    const patientHtml = step.patient ? `<div class="cbx-patient"><span class="cbx-pin">🧑‍⚕️ Patient</span> ${step.patient}</div>` : '';
+    const optsHtml = step.options.map((opt, i) => {
+      const isCorrect = !!(opt.isCorrect || opt.correct);
+      let cls = 'cbx-opt';
+      if (G.cbxAnswered) {
+        if (isCorrect) cls += ' correct';
+        if (G.cbxSelected === i && !isCorrect) cls += ' wrong';
+      }
+      const dis = G.cbxAnswered ? 'disabled' : '';
+      return `<button class="${cls}" ${dis} onclick="answerCrossBorderCbrne(${i})">
+        <span class="cbx-opt-letter">${String.fromCharCode(65 + i)}</span>
+        <span class="cbx-opt-text">${opt.text}</span>
+        ${G.cbxAnswered ? `<div class="cbx-opt-why">${opt.why}</div>` : ''}
+      </button>`;
+    }).join('');
+    const nextBtn = G.cbxAnswered
+      ? `<button class="btn-primary cbx-next" onclick="advanceCrossBorderCbrne(false)">Next decision →</button>`
+      : '';
+    const phaseTag = step.phase ? `<span class="cbx-phase">${step.phase}</span>` : '';
+    bodyHtml = `
+      <div class="cbx-step-card">
+        <div class="cbx-step-meta">Decision ${G.cbxStepIdx} / ${totalSteps - 1} ${phaseTag}</div>
+        <h3>${step.title}</h3>
+        ${patientHtml}
+        <p class="cbx-prompt">${step.prompt}</p>
+        <div class="cbx-opts">${optsHtml}</div>
+        ${nextBtn}
+      </div>`;
+  }
+
+  app.innerHTML = `
+    ${renderHUD('cbxTimer')}
+    <div class="screen cbx-screen">
+      <div class="cbx-header">
+        <span class="cbx-tag">🛂 Cross-Border CBRNe Drill</span>
+        <div class="cbx-progress"><div class="cbx-progress-fill" style="width:${progressPct}%"></div></div>
+      </div>
+      ${charBubble('mentor', step.kind === 'briefing'
+        ? 'Briefing first. Read the matrix and the semantics mapping — both will matter during the drill.'
+        : 'Decide as the highlighted role. Watch for distractors that match common Kahoot misconceptions.', { delay: 0 })}
+      <div class="cbx-roles">${rolesHtml}</div>
+      ${bodyHtml}
+      <div class="cbx-exit-row">
+        <button class="btn-outline" onclick="G.screen='modes';stopAllTimers();render();">← Exit Drill</button>
+      </div>
+    </div>`;
+}
+
+function answerCrossBorderCbrne(idx) {
+  if (G.cbxAnswered) return;
+  const content = window.CROSS_BORDER_CBRNE;
+  const steps = (Array.isArray(G.cbxSteps) && G.cbxSteps.length) ? G.cbxSteps : content.steps;
+  const step = steps[G.cbxStepIdx];
+  if (!step || step.kind !== 'mcq') return;
+
+  const opt = step.options[idx];
+  // Score by option identity, not array position. Options are shuffled per
+  // session, so the index is just a display position.
+  const correct = !!(opt.isCorrect || opt.correct);
+  G.cbxAnswered = true;
+  G.cbxSelected = idx;
+
+  const tNow = Date.now();
+  const elapsedSec = Math.max(0, Math.round((tNow - (G.cbxBriefingMs || tNow)) / 1000));
+  // Per-question response time uses Tracker.questionStartTime so it is
+  // independent of the cumulative drill clock.
+  const responseTimeSec = Math.max(0, Math.round((tNow - (Tracker.questionStartTime || tNow)) / 1000));
+  const displayedOptionOrder = Array.isArray(step.displayedOptionOrder) && step.displayedOptionOrder.length
+    ? step.displayedOptionOrder.slice()
+    : step.options.map(o => o.id);
+  G.cbxAnswerLog.push({
+    stepIndex: typeof step.stepIndex === 'number' ? step.stepIndex : G.cbxStepIdx,
+    stepId: step.id,
+    construct: step.construct || step.metric || null,
+    phase: step.phase || null,
+    role: step.role,
+    promptLabel: step.title || null,
+    correctOptionId: step.correctOptionId || null,
+    selectedDisplayIndex: idx,
+    selectedOptionId: opt.id || null,
+    selectedOptionLabel: opt.text || null,
+    displayedOptionOrder,
+    isCorrect: correct,
+    correct, // back-compat
+    selected: idx, // back-compat
+    elapsedSec,
+    responseTimeSec,
+    at: new Date().toISOString()
+  });
+  if (step.metric) G.cbxMetrics.perStepCorrect[step.metric] = correct;
+
+  // Metric capture per step type
+  if (step.id === 'triage' && correct) G.cbxMetrics.triageDashboardLatencySec = elapsedSec;
+  if (step.id === 'allocation') G.cbxMetrics.handoverDelaySec = elapsedSec;
+  if (step.id === 'allocation' && !correct) G.cbxMetrics.contaminatedTransportErrors += 1;
+  if (step.id === 'degraded' && correct) G.cbxMetrics.degradedRecoverySec = elapsedSec;
+
+  Tracker.recordAnswer(`crossBorderCbrne_${step.id}`, opt.id || String(idx), correct, {
+    stepIndex: typeof step.stepIndex === 'number' ? step.stepIndex : G.cbxStepIdx,
+    stepId: step.id,
+    construct: step.construct || step.metric || null,
+    phase: step.phase || null,
+    role: step.role || null,
+    promptLabel: step.title || null,
+    correctOptionId: step.correctOptionId || null,
+    selectedOptionId: opt.id || null,
+    selectedOptionLabel: opt.text || null,
+    selectedDisplayIndex: idx,
+    displayedOptionOrder,
+    isCorrect: correct,
+    responseTimeSec
+  });
+
+  if (correct) {
+    sfx('correct');
+    flashScreen('green');
+    addScore(120);
+    addXP(30);
+    G.cbxCorrectCount++;
+    updateStreak(true);
+    G.totalCorrect++;
+  } else {
+    sfx('wrong');
+    shakeScreen();
+    addScore(-20);
+    updateStreak(false);
+  }
+  checkAchievements();
+  render();
+}
+
+function advanceCrossBorderCbrne(fromBriefing) {
+  G.cbxStepIdx++;
+  G.cbxAnswered = false;
+  G.cbxSelected = null;
+  Tracker.startQuestion();
+  const content = window.CROSS_BORDER_CBRNE;
+  const steps = (Array.isArray(G.cbxSteps) && G.cbxSteps.length) ? G.cbxSteps : content.steps;
+  if (G.cbxStepIdx >= steps.length) {
+    finishCrossBorderCbrne();
+    return;
+  }
+  render();
+}
+
+// Build the structured AAR / details payload used for both persistence (Tracker
+// endMode `details` field, Firebase mode_results) and the AAR render. Single
+// source of truth so admin-side analytics match what the learner sees.
+function buildCrossBorderCbrneSummary() {
+  const content = window.CROSS_BORDER_CBRNE;
+  if (!content) return null;
+  const steps = (Array.isArray(G.cbxSteps) && G.cbxSteps.length) ? G.cbxSteps : content.steps;
+  const mcqSteps = steps.filter(s => s.kind === 'mcq');
+  const total = mcqSteps.length;
+  const correct = G.cbxCorrectCount || 0;
+  const accuracyPct = total > 0 ? Math.round((correct / total) * 100) : 0;
+  const log = (G.cbxAnswerLog || []).slice();
+  const m = G.cbxMetrics || {};
+  const targets = content.aarTargets || {};
+  const perStep = m.perStepCorrect || {};
+
+  const triageOk = !!perStep.triageAccuracy;
+  const antidoteOk = !!perStep.antidote;
+  const semanticsOk = !!perStep.semantics;
+  const preDeconOk = !!perStep.preDecon;
+  const degradedOk = !!perStep.degraded;
+  const allocationOk = !!perStep.contaminatedTransport;
+
+  const triageLatencyMissed = m.triageDashboardLatencySec != null && m.triageDashboardLatencySec > targets.triageDashboardLatencySec;
+  const handoverMissed = m.handoverDelaySec != null && m.handoverDelaySec > targets.handoverDelaySec;
+  const degradedRecMissed = m.degradedRecoverySec != null && m.degradedRecoverySec > targets.degradedRecoverySec;
+
+  const strengths = [];
+  const improvements = [];
+  if (triageOk) strengths.push('MASS/START Red/Immediate classification correct'); else improvements.push('Reinforce MASS/START Red/Immediate criteria for inhalational toxidromes');
+  if (antidoteOk) strengths.push('Cyanide antidote (Hydroxocobalamin) selected correctly'); else improvements.push('Cyanide antidote: Hydroxocobalamin — distinguish from Ca-gluconate (HF) and atropine/2-PAM (nerve agents)');
+  if (preDeconOk) strengths.push('Pre-decontamination life-saving priority applied'); else improvements.push('Apply Priority 0 life-saving intervention before routine wet decon for arresting patients');
+  if (semanticsOk) strengths.push('Cross-border semantic mapping handled with provenance and flag'); else improvements.push('Preserve source label, map to shared dashboard, and flag non-equivalence');
+  if ((m.contaminatedTransportErrors || 0) === 0) strengths.push('Zero preventable contaminated transports'); else improvements.push('Avoid transport of non-decontaminated casualties without receiver alert');
+
+  const recs = [];
+  if (!semanticsOk) recs.push('Pre-publish a bilingual EU↔KOR triage-term mapping table on the shared COP and rehearse it during quarterly handover drills');
+  if (!degradedOk || degradedRecMissed) recs.push('Inject a degraded-network event in every functional drill (≥6 min latency, duplicate / lost messages) and require timestamp + uncertainty flags + radio fallback');
+  if (!antidoteOk || !preDeconOk) recs.push('Pre-stage Hydroxocobalamin (Cyanokit) at transport hubs and rehearse the Priority-0 pre-decon algorithm with hot-zone teams');
+  if (!allocationOk) recs.push('Codify a receiver-alert + capacity-confirm-before-transport check into the standing cross-border SOP, with a written cross-border notification SLA');
+  if (triageLatencyMissed) recs.push(`Reduce triage→dashboard latency: target ≤${targets.triageDashboardLatencySec}s. Use one-tap dashboard entry from field tablets and pre-printed Red/Immediate stickers`);
+  if (handoverMissed) recs.push(`Reduce hospital handover delay: target ≤${targets.handoverDelaySec}s. Standardise a 5-line cross-border handover script (ID, agent, decon status, triage, ETA)`);
+  if (recs.length === 0) recs.push('Maintain the current playbook: bilingual semantic mapping, degraded-network injects, pre-staged Hydroxocobalamin and pre-transport receiver alerts are all on target. Schedule a quarterly re-drill to prevent decay.');
+
+  // Per-step correctness summary keyed by stepId (admin-side analytics).
+  const perStepSummary = mcqSteps.map(s => {
+    const entry = log.find(l => l.stepId === s.id);
+    return {
+      stepIndex: typeof s.stepIndex === 'number' ? s.stepIndex : null,
+      stepId: s.id,
+      construct: s.construct || s.metric || null,
+      phase: s.phase || null,
+      role: s.role || null,
+      correctOptionId: s.correctOptionId || null,
+      selectedOptionId: entry ? (entry.selectedOptionId || null) : null,
+      isCorrect: entry ? !!entry.isCorrect : false,
+      responseTimeSec: entry ? entry.responseTimeSec : null,
+      displayedOptionOrder: entry ? entry.displayedOptionOrder : (s.displayedOptionOrder || [])
+    };
+  });
+
+  return {
+    modeKey: 'crossBorderCbrne',
+    modeName: 'Cross-Border CBRNe Drill',
+    language: (typeof window !== 'undefined' && window.GAME_LANG) ? window.GAME_LANG : 'en',
+    nickname: G.nickname || null,
+    team: G.team || null,
+    sessionId: (typeof Tracker !== 'undefined' && Tracker.sessionId) ? Tracker.sessionId : null,
+    startedAt: G.cbxStartMs ? new Date(G.cbxStartMs).toISOString() : null,
+    completedAt: new Date().toISOString(),
+    totalQuestions: total,
+    totalCorrect: correct,
+    accuracyPct,
+    score: G.score || 0,
+    xp: G.xp || 0,
+    maxStreak: G.maxStreak || 0,
+    aarMetrics: {
+      triageDashboardLatencySec: m.triageDashboardLatencySec,
+      handoverLatencySec: m.handoverDelaySec,
+      contaminatedTransportErrors: m.contaminatedTransportErrors || 0,
+      degradedNetworkRecoverySec: m.degradedRecoverySec,
+      targets: {
+        triageDashboardLatencySec: targets.triageDashboardLatencySec,
+        handoverDelaySec: targets.handoverDelaySec,
+        contaminatedTransportErrors: targets.contaminatedTransportErrors,
+        degradedRecoverySec: targets.degradedRecoverySec
+      },
+      pass: {
+        triageDashboardLatency: m.triageDashboardLatencySec != null && m.triageDashboardLatencySec <= targets.triageDashboardLatencySec,
+        handover: m.handoverDelaySec != null && m.handoverDelaySec <= targets.handoverDelaySec,
+        contaminatedTransport: (m.contaminatedTransportErrors || 0) <= (targets.contaminatedTransportErrors || 0),
+        degradedRecovery: m.degradedRecoverySec != null && m.degradedRecoverySec <= targets.degradedRecoverySec
+      }
+    },
+    perStepCorrect: perStep,
+    perStepSummary,
+    answerLog: log,
+    strengths,
+    improvements,
+    recommendations: recs
+  };
+}
+
+function finishCrossBorderCbrne() {
+  G.modesCompleted.add('crossBorderCbrne');
+  const content = window.CROSS_BORDER_CBRNE;
+  const steps = (Array.isArray(G.cbxSteps) && G.cbxSteps.length) ? G.cbxSteps : content.steps;
+  const mcqSteps = steps.filter(s => s.kind === 'mcq');
+  const total = mcqSteps.length;
+  const pct = total > 0 ? Math.round((G.cbxCorrectCount / total) * 100) : 0;
+  if (pct === 100 && total > 0) G.perfectModes++;
+  checkAchievements();
+  advanceStoryAct();
+  const summary = buildCrossBorderCbrneSummary();
+  G.cbxSummary = summary;
+  Tracker.endMode(G.cbxCorrectCount, summary);
+  Tracker.endSession(G.score, G.level, G.maxStreak, G.modesCompleted);
+  G.screen = 'crossBorderCbrneAAR';
+  render();
+}
+
+function renderCrossBorderCbrneAAR() {
+  const content = window.CROSS_BORDER_CBRNE;
+  const targets = content.aarTargets;
+  const m = G.cbxMetrics || {};
+  const log = G.cbxAnswerLog || [];
+
+  function metricRow(label, actual, target, unit, betterLower) {
+    let pass;
+    if (actual == null) pass = false;
+    else if (betterLower) pass = actual <= target;
+    else pass = actual >= target;
+    const cls = pass ? 'aar-pass' : 'aar-fail';
+    const actualText = (actual == null) ? '—' : (actual + unit);
+    const tgtText = (betterLower ? '≤ ' : '≥ ') + target + unit;
+    return `<tr class="${cls}"><td>${label}</td><td>${actualText}</td><td>${tgtText}</td><td>${pass ? '✅' : '⚠️'}</td></tr>`;
+  }
+
+  const perStep = m.perStepCorrect || {};
+  const triageOk = !!perStep.triageAccuracy;
+  const antidoteOk = !!perStep.antidote;
+  const semanticsOk = !!perStep.semantics;
+  const preDeconOk = !!perStep.preDecon;
+
+  const strengths = [];
+  const improvements = [];
+  if (triageOk) strengths.push('MASS/START Red/Immediate classification correct'); else improvements.push('Reinforce MASS/START Red/Immediate criteria for inhalational toxidromes');
+  if (antidoteOk) strengths.push('Cyanide antidote (Hydroxocobalamin) selected correctly'); else improvements.push('Cyanide antidote: Hydroxocobalamin — distinguish from Ca-gluconate (HF) and atropine/2-PAM (nerve agents)');
+  if (preDeconOk) strengths.push('Pre-decontamination life-saving priority applied'); else improvements.push('Apply Priority 0 life-saving intervention before routine wet decon for arresting patients');
+  if (semanticsOk) strengths.push('Cross-border semantic mapping handled with provenance and flag'); else improvements.push('Preserve source label, map to shared dashboard, and flag non-equivalence');
+  if ((m.contaminatedTransportErrors || 0) === 0) strengths.push('Zero preventable contaminated transports'); else improvements.push('Avoid transport of non-decontaminated casualties without receiver alert');
+
+  const degradedOk = !!perStep.degraded;
+  const allocationOk = !!perStep.contaminatedTransport;
+  const triageLatencyMissed = m.triageDashboardLatencySec != null && m.triageDashboardLatencySec > targets.triageDashboardLatencySec;
+  const handoverMissed = m.handoverDelaySec != null && m.handoverDelaySec > targets.handoverDelaySec;
+  const degradedRecMissed = m.degradedRecoverySec != null && m.degradedRecoverySec > targets.degradedRecoverySec;
+
+  const recs = [];
+  if (!semanticsOk) recs.push('Pre-publish a bilingual EU↔KOR triage-term mapping table on the shared COP and rehearse it during quarterly handover drills');
+  if (!degradedOk || degradedRecMissed) recs.push('Inject a degraded-network event in every functional drill (≥6 min latency, duplicate / lost messages) and require timestamp + uncertainty flags + radio fallback');
+  if (!antidoteOk || !preDeconOk) recs.push('Pre-stage Hydroxocobalamin (Cyanokit) at transport hubs and rehearse the Priority-0 pre-decon algorithm with hot-zone teams');
+  if (!allocationOk) recs.push('Codify a receiver-alert + capacity-confirm-before-transport check into the standing cross-border SOP, with a written cross-border notification SLA');
+  if (triageLatencyMissed) recs.push(`Reduce triage→dashboard latency: target ≤${targets.triageDashboardLatencySec}s. Use one-tap dashboard entry from field tablets and pre-printed Red/Immediate stickers`);
+  if (handoverMissed) recs.push(`Reduce hospital handover delay: target ≤${targets.handoverDelaySec}s. Standardise a 5-line cross-border handover script (ID, agent, decon status, triage, ETA)`);
+  if (recs.length === 0) {
+    recs.push('Maintain the current playbook: bilingual semantic mapping, degraded-network injects, pre-staged Hydroxocobalamin and pre-transport receiver alerts are all on target. Schedule a quarterly re-drill to prevent decay.');
+  }
+
+  const timelineHtml = log.map((l, i) => {
+    const stepDef = content.steps.find(s => s.id === l.stepId);
+    return `<div class="aar-tl-row ${l.correct ? 'ok' : 'no'}">
+      <span class="aar-tl-num">${i+1}</span>
+      <span class="aar-tl-time">+${l.elapsedSec}s</span>
+      <span class="aar-tl-step">${stepDef ? stepDef.title : l.stepId}</span>
+      <span class="aar-tl-mark">${l.correct ? '✅' : '❌'}</span>
+    </div>`;
+  }).join('');
+
+  const semRows = content.semanticsTable.map(s =>
+    `<tr><td>${s.sourceSystem}</td><td>${s.sourceTerm}</td><td>${s.dashboardTerm}</td><td>${s.koreanTerm}</td><td>${s.flag}</td></tr>`
+  ).join('');
+
+  const grade = pctGrade(G.cbxCorrectCount, content.steps.filter(s=>s.kind==='mcq').length);
+  if (grade === 'S' || grade === 'A') confetti();
+
+  app.innerHTML = `
+    <div class="screen results-screen cbx-aar-screen">
+      ${charBubble('mentor', 'Hot wash. Read the timeline, then the metric table — that is where decisions become evidence.', { success: true })}
+      <div class="result-big anim-in">🛂</div>
+      <div class="result-sub">Cross-Border CBRNe Drill — After-Action Review</div>
+      <div class="result-grade ${grade==='S'?'s':grade==='A'?'a':grade==='B'?'b':'c'} anim-in">Grade: ${grade}</div>
+
+      <div class="aar-section anim-in">
+        <h3>Decision timeline</h3>
+        <div class="aar-tl">${timelineHtml || '<em>No decisions logged.</em>'}</div>
+      </div>
+
+      <div class="aar-section anim-in">
+        <h3>Drill metrics</h3>
+        <table class="aar-metrics">
+          <thead><tr><th>Metric</th><th>Result</th><th>Target</th><th></th></tr></thead>
+          <tbody>
+            ${metricRow('Triage accuracy (Red/Immediate)', triageOk ? 100 : 0, 100, '%', false)}
+            ${metricRow('Cyanide antidote correctness', antidoteOk ? 100 : 0, 100, '%', false)}
+            ${metricRow('Semantic mapping accuracy', semanticsOk ? 100 : 0, 100, '%', false)}
+            ${metricRow('Triage → dashboard latency', m.triageDashboardLatencySec, targets.triageDashboardLatencySec, 's', true)}
+            ${metricRow('Handover delay', m.handoverDelaySec, targets.handoverDelaySec, 's', true)}
+            ${metricRow('Preventable contaminated transport', m.contaminatedTransportErrors || 0, targets.contaminatedTransportErrors, '', true)}
+            ${metricRow('Degraded-network recovery', m.degradedRecoverySec, targets.degradedRecoverySec, 's', true)}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="aar-section anim-in">
+        <h3>Strengths</h3>
+        <ul class="aar-list ok">${strengths.map(s=>`<li>${s}</li>`).join('') || '<li>None identified yet.</li>'}</ul>
+        <h3>Areas for improvement</h3>
+        <ul class="aar-list no">${improvements.map(s=>`<li>${s}</li>`).join('') || '<li>None — well done.</li>'}</ul>
+        <h3>Recommendations</h3>
+        <ul class="aar-list rec">${recs.map(s=>`<li>${s}</li>`).join('')}</ul>
+      </div>
+
+      <div class="aar-section anim-in">
+        <h3>Medical semantics mapping (reference)</h3>
+        <div class="cbx-table-scroll">
+          <table class="cbx-table">
+            <thead><tr><th>Source system</th><th>Source term</th><th>Shared dashboard</th><th>Korean DMAT/START</th><th>Flag / notes</th></tr></thead>
+            <tbody>${semRows}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="result-stats anim-in">
+        <div class="r-stat"><div class="val">${G.cbxCorrectCount}/${content.steps.filter(s=>s.kind==='mcq').length}</div><div class="lbl">Correct decisions</div></div>
+        <div class="r-stat"><div class="val">${G.score}</div><div class="lbl">Total score</div></div>
+        <div class="r-stat"><div class="val">${G.maxStreak}</div><div class="lbl">Max streak</div></div>
+      </div>
+
+      <div class="result-actions anim-in">
+        <button class="btn-primary" onclick="G.screen='modes';render();">Select Mission 🏠</button>
+        <button class="btn-outline" onclick="enterMode('crossBorderCbrne')">Retry Drill 🔄</button>
+      </div>
+    </div>`;
+}
+
+function pctGrade(correct, total) {
+  if (!total) return 'C';
+  const pct = Math.round((correct / total) * 100);
+  if (pct >= 90) return 'S';
+  if (pct >= 75) return 'A';
+  if (pct >= 50) return 'B';
+  return 'C';
+}
+

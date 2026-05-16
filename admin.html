@@ -229,6 +229,7 @@ tr:hover td{background:rgba(68,138,255,0.05)}
         <div class="tab" onclick="filterQuestions('tactical')">🎯 Tactical Med</div>
         <div class="tab" onclick="filterQuestions('ctm')">🛡️ CTM</div>
         <div class="tab" onclick="filterQuestions('campaign')">⚔️ Campaign</div>
+        <div class="tab" onclick="filterQuestions('crossBorderCbrne')">🛂 Cross-Border CBRNe</div>
       </div>
       <table id="question-analytics-table">
         <thead><tr><th>Question ID</th><th>Mode</th><th>Attempts</th><th>Correct</th><th>Correct Rate</th><th>Avg. Time</th></tr></thead>
@@ -241,6 +242,11 @@ tr:hover td{background:rgba(68,138,255,0.05)}
     <div class="section">
       <h2><span class="icon">🎮</span> Detailed Mode Analysis</h2>
       <div class="mode-stat-grid" id="mode-detail-stats"></div>
+    </div>
+    <div class="section" id="crossborder-summary-section" style="display:none">
+      <h2><span class="icon">🛂</span> Cross-Border CBRNe Drill — Summary</h2>
+      <p style="color:var(--text2);font-size:0.85rem;margin-bottom:12px">Drill-specific roll-up: participant count, accuracy, response time, per-construct correct rates and most-missed construct. Derived from <code>crossBorderCbrne</code> mode results and per-step question responses.</p>
+      <div id="crossborder-summary"></div>
     </div>
   </div>
 
@@ -444,6 +450,7 @@ async function refreshDashboard() {
     renderModeStats();
     renderHardQuestions();
     renderDailyChart();
+    renderCrossBorderSummary();
   } catch(e) {
     console.error(e);
   }
@@ -504,7 +511,8 @@ const MODE_NAMES = {
   hseep_quiz: {icon: '📋', name: 'HSEEP Quiz', color: 'var(--blue)'},
   hseep_scenario: {icon: '🏗️', name: 'HSEEP Exercise Workshop', color: 'var(--blue)'},
   hseep_template: {icon: '📄', name: 'HSEEP Template Builder', color: 'var(--blue)'},
-  hseep_campaign: {icon: '⚔️', name: 'HSEEP Campaign', color: 'var(--blue)'}
+  hseep_campaign: {icon: '⚔️', name: 'HSEEP Campaign', color: 'var(--blue)'},
+  crossBorderCbrne: {icon: '🛂', name: 'Cross-Border CBRNe Drill', color: 'var(--cyan)'}
 };
 
 // Helper: resolve mode name with campaign sub-mode support
@@ -544,6 +552,95 @@ function renderModeStats() {
   
   container.innerHTML = html || '<p style="color:var(--text2);text-align:center;padding:20px">No data available yet</p>';
   detailContainer.innerHTML = html || '<p style="color:var(--text2);text-align:center;padding:20px">No data available yet</p>';
+}
+
+// Cross-Border CBRNe Drill — drill-specific admin summary.
+// Derives participant count, average accuracy, average score, average response
+// time, per-construct correct rate and most-missed construct from the existing
+// /api/admin/dashboard payload (mode_stats + hard_questions). Pass/fail of the
+// 90 / 180 / 0 / 120 AAR thresholds requires the per-session `details` JSON
+// (now persisted by the client on every drill completion); if the backend
+// doesn't surface that field yet, the panel renders without it and notes the
+// limitation inline.
+const CROSSBORDER_CONSTRUCT_LABELS = {
+  triage: 'MASS/START Triage',
+  pre_decon: 'Pre-Decontamination Priority',
+  antidote: 'Cyanide Antidote',
+  semantic_mapping: 'Semantic Mapping',
+  degraded_network: 'Degraded Network',
+  allocation: 'Cross-Border Allocation'
+};
+// Map step IDs to construct keys. Stays in sync with cross_border_cbrne_content.js.
+const CROSSBORDER_STEP_TO_CONSTRUCT = {
+  triage: 'triage',
+  predecon: 'pre_decon',
+  antidote: 'antidote',
+  semantics: 'semantic_mapping',
+  degraded: 'degraded_network',
+  allocation: 'allocation'
+};
+
+function renderCrossBorderSummary() {
+  const section = document.getElementById('crossborder-summary-section');
+  const container = document.getElementById('crossborder-summary');
+  if (!section || !container) return;
+
+  const stats = (dashboardData && Array.isArray(dashboardData.mode_stats))
+    ? dashboardData.mode_stats.find(s => s.mode === 'crossBorderCbrne')
+    : null;
+  if (!stats) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+
+  const hard = (dashboardData && Array.isArray(dashboardData.hard_questions))
+    ? dashboardData.hard_questions.filter(q => typeof q.question_id === 'string' && q.question_id.indexOf('crossBorderCbrne_') === 0)
+    : [];
+
+  // Per-construct aggregation
+  const byConstruct = {};
+  for (const q of hard) {
+    const stepId = q.question_id.replace(/^crossBorderCbrne_/, '');
+    const construct = CROSSBORDER_STEP_TO_CONSTRUCT[stepId] || stepId;
+    if (!byConstruct[construct]) byConstruct[construct] = { attempts: 0, correct: 0 };
+    const attempts = q.total_attempts || 0;
+    const acc = q.accuracy || 0;
+    byConstruct[construct].attempts += attempts;
+    byConstruct[construct].correct += Math.round(attempts * acc / 100);
+  }
+
+  let mostMissedKey = null;
+  let mostMissedRate = 101;
+  const constructRows = Object.keys(byConstruct).map(k => {
+    const row = byConstruct[k];
+    const rate = row.attempts > 0 ? Math.round(row.correct / row.attempts * 100) : 0;
+    if (row.attempts > 0 && rate < mostMissedRate) { mostMissedRate = rate; mostMissedKey = k; }
+    const label = CROSSBORDER_CONSTRUCT_LABELS[k] || k;
+    const cls = rate >= 80 ? 'badge-green' : rate >= 60 ? 'badge-yellow' : 'badge-red';
+    return `<tr><td>${label}</td><td>${row.attempts}</td><td><span class="badge ${cls}">${rate}%</span></td></tr>`;
+  }).join('');
+
+  const mostMissedLabel = mostMissedKey ? (CROSSBORDER_CONSTRUCT_LABELS[mostMissedKey] || mostMissedKey) : '—';
+
+  const acc = Math.round(stats.avg_accuracy || 0);
+  const accColor = acc >= 80 ? 'var(--green)' : acc >= 60 ? 'var(--yellow)' : 'var(--red)';
+
+  container.innerHTML = `
+    <div class="stat-grid" style="margin-bottom:16px">
+      <div class="stat-card cyan"><div class="label">Participants</div><div class="value">${stats.attempts}</div><div class="sub">drill completions</div></div>
+      <div class="stat-card green"><div class="label">Avg. Accuracy</div><div class="value">${acc}%</div><div class="sub" style="color:${accColor}">across 6 decisions</div></div>
+      <div class="stat-card blue"><div class="label">Avg. Score</div><div class="value">${Math.round(stats.avg_score || 0)}</div><div class="sub">points</div></div>
+      <div class="stat-card purple"><div class="label">Avg. Response Time</div><div class="value">${Math.round(stats.avg_time || 0)}s</div><div class="sub">per drill</div></div>
+    </div>
+    <h3 style="margin:16px 0 8px">Per-construct correct rate</h3>
+    <table>
+      <thead><tr><th>Construct</th><th>Attempts</th><th>Correct rate</th></tr></thead>
+      <tbody>${constructRows || '<tr><td colspan="3" style="text-align:center;color:var(--text2)">No per-construct data yet</td></tr>'}</tbody>
+    </table>
+    <p style="margin-top:8px;color:var(--text2);font-size:0.85rem">Most-missed construct: <strong>${mostMissedLabel}</strong>${mostMissedKey ? ` (${mostMissedRate}% correct)` : ''}.</p>
+    <p style="margin-top:8px;color:var(--text2);font-size:0.8rem">AAR threshold pass rates (triage→dashboard ≤ 90s, handover ≤ 180s, contaminated transport = 0, degraded recovery ≤ 120s) and option-distribution distractor analysis require the per-session <code>details</code> JSON the client now persists on completion. The current backend dashboard endpoint does not yet surface that field — see PR notes for the backend extension that exposes it.</p>
+  `;
 }
 
 function renderHardQuestions() {
